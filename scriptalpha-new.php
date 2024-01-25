@@ -45,12 +45,12 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
             $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Überprüfung des Schädlichen Code bei '. $file );
             // Funktion zur Überprüfung auf schädlichen Code
             MaliciousCode($fileContent, $modx);
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Überprüfung der originalen Datei'. $file.' ist abgeschlossen');
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Überprüfung der Datei '. $file.' ist abgeschlossen');
         }
     }
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'TXT-Dateien geladen: ' . print_r($filesA, true) . ' | ' . print_r($filesB, true)); // DEBUG
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'TXT-Dateien geladen: ' . print_r($filesA, true) . ' | ' . print_r($filesB, true)); // DEBUG
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Funktion Textvergleich wird initialisiert...');  
-    $links = compareContentWithTxt($filePath, $ignoreTags, $modx);
+    $links = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx);
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet'); // DEBUG
     $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($links, true)); // DEBUG
 }
@@ -62,17 +62,51 @@ else {
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler: Die TXT-Ordner (A oder B) existieren nicht.');
 }
 
+// Funktion zum Vergleich der Ressource Content und TXT Inhalt
+function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
+
+    // rufe die Funktion zum Aufruf des ModX Kontext key 'web'
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Initialisiere Webkontext und Ressourcen...'); // DEBUG
+    $webResources = getWebContextResources($modx);
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Webkontext und Ressourcen wurden geladen...'); // DEBUG
+
+    // Initialisiere das Verknüpfungsarray
+    $linkArray = array();
+
+    // Durchlaufe alle TXT Dateien im ersten Ordner
+    $filesA = scandir($txt_Doc_A);
+    foreach ($filesA as $file) {
+        if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
+             $filePath = $txt_Doc_A . '/' . $file;
+             // Lese der Txt-Datei lesen
+             $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
+             $fileContent = file_get_contents($filePath);
+             $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
+
+             // Vergleiche die Ressourcen Inhalte mit dem TXT Inhalt
+             $result = compareTexts($fileContent, $webResources, $ignoreTags, $modx, $filePath);
+
+             // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
+             if (!empty($result)) {
+                 $linkArray = array_merge($linkArray, $result);
+             }
+        }
+    }
+
+    // Gebe das Verknüpfungsarray zurück
+    return $linkArray;
+}
+
 // Funktion zum Aufruf des Modx Kontext key 'web'
-function getWebContextResources() {
-    global $modx;
+function getWebContextResources($modx) {
     
     // Rufe ModX Kontext auf
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Rufe Kontext "web" auf.'); // DEBUG
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Rufe Kontext "web" auf.'); // DEBUG
     $webContext = $modx->getContext('web');
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Web-Kontext geladen: ' . print_r($webContext, true)); // DEBUG
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Web-Kontext geladen: ' . print_r($webContext, true)); // DEBUG
 
     // Rufe die darin enthaltenen Ressourcen auf
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Lade die Ressourcen'); // DEBUG
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Lade die Ressourcen'); // DEBUG
     if (!$resources = $modx->getCollection('modResource', array('context_key' => 'web'))){
         $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Laden der Ressourcen: ' . $webContext->error); 
     }
@@ -87,41 +121,44 @@ function getWebContextResources() {
             'alias' => $resource->get('alias')
         );
     }
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet'); // DEBUG
-    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($resultArray, true)); // DEBUG
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet'); // DEBUG
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($resultArray, true)); // DEBUG
     // Gebe den Array zurück
     return $resultArray;
 }
 
-// Funktion zum Vergleich der Ressource Content und TXT Inhalt
-function compareContentWithTxt($txtFilePath, $ignoreTags = array(), $modx) {
-
-    // Rufe Datei aus den Ersten Ordner auf
-    $txtContent = file_get_contents($txtFilePath);
-    
-    // rufe die Funktion zum Aufruf des ModX Kontext key 'web'
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Initsialsisiere Webkontext und Ressourcen...'); // DEBUG
-    $webResources = getWebContextResources();
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Webkontext und Ressourcen wurden geladen...'); // DEBUG
-    // Initialisiere das Verknüpfungsarray
+// Funktion zum Vergleich von Texten
+function compareTexts($txtContent, $webResources, $ignoreTags, $modx, $txtFilePath) {
     $linkArray = array();
 
-    // Vergleiche die Ressourcen Inhalte mit des TXT Datei
     foreach ($webResources as $resource) {
         // Ignoriere Tags der Ressourcen Content
         $resourceContent = strip_tags($resource['content'], implode('', $ignoreTags));
 
-        // Vergleiche die Inhalte
-        similar_text(strip_tags($resourceContent), strip_tags($txtContent), $similarityPercentage);
+        // Texte reinigen und Tags entfernen
+        $cleanedResourceContent = preg_replace('/<\/?[^>]+>/', '', $resourceContent);
+        $cleanedResourceContent = str_replace(["\r", "\n"], '', $cleanedResourceContent);
 
-        if ($similarityPercentage > 80) {
+        // Wort-für-Wort-Vergleich
+        $resourceWords = explode(' ', $cleanedResourceContent);
+        $txtWords = explode(' ', $txtContent);
+
+        // Vergleich der Worte
+        $commonWords = array_intersect($resourceWords, $txtWords);
+        $wordSimilarity = count($commonWords) / max(count($resourceWords), count($txtWords)) * 100;
+
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Wort-Ähnlichkeitsprozentsatz: ' . $wordSimilarity);
+
+        if ($wordSimilarity > 80) {
             // Stimmen diese überein, speichere die Position des jeweiligen Quelle
-            // Füge dort die entsprechene Ressourcen ID hinzu als Verknüpfung
-            $positionInResource = strpos($resourceContent, strip_tags($txtContent));
-            $positionInTxtFile = strpos(strip_tags($txtContent), strip_tags($resourceContent));
+            // Füge dort die entsprechende Ressourcen ID hinzu als Verknüpfung
+            $positionInResource = mb_strpos($resourceContent, strip_tags($txtContent));
+            $positionInTxtFile = mb_strpos(strip_tags($txtContent), strip_tags($resourceContent));
 
-            $modx->log(xPDO::LOG_LEVEL_INFO, 'Inhalt von Ressource ID ' . $resource['id'] . ' stimmt mit dem Inhalt der TXT-Datei überein.');
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Common Words: ' . implode(' ', $commonWords));
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Resource Content: ' . $cleanedResourceContent);
 
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Inhalt von Ressource ID ' . $resource['id'] . ' stimmt mit dem Inhalt der TXT-Datei überein.');
             // Füge die Ressourcen ID, Positionen und Pfad zur TXT-Datei zum Verknüpfungsarray hinzu
             $linkArray[] = array(
                 'resource_id' => $resource['id'],
@@ -129,13 +166,15 @@ function compareContentWithTxt($txtFilePath, $ignoreTags = array(), $modx) {
                 'position_in_txt_file' => $positionInTxtFile,
                 'txt_file_path' => $txtFilePath
             );
+        } else {
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Common Words: ' . implode(' ', $commonWords));
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Resource Content: ' . $cleanedResourceContent);
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Nothit: Inhalt von Ressource ID ' . $resource['id'] . ' stimmt nicht mit dem Inhalt der TXT-Datei überein.');
         }
     }
 
-    // Gebe das Verknüpfungsarray zurück
     return $linkArray;
 }
-
 function MaliciousCode($content, $modx) {
     // Definiere Muster, nach denen im XML-Inhalt gesucht werden soll
     $keywords_pattern = array(
