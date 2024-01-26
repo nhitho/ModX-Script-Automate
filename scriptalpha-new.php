@@ -163,6 +163,7 @@ function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
     return $linkArray;
 }
 
+// Funktion der Auslesung der Positionen vom Ressource
 function getPositionRessource($webResources, $ignoreTags, $modx) {
     $pos_Ressource = array();
 
@@ -186,6 +187,7 @@ function getPositionRessource($webResources, $ignoreTags, $modx) {
     return $pos_Ressource;
 }
 
+// Funktion der Auslesung der Positionen vom Text
 function getPositionText($fileContent, $modx) {
     $pos_Text = array();
 
@@ -202,6 +204,26 @@ function getPositionText($fileContent, $modx) {
     // Hier hast du nun alle Positionen mit den Zeilennummern und den Inhalten der Zeilen
     return $pos_Text;
 }
+
+// Funktion der Auslersung der Position vom Template-Variable des Ressoruces 
+
+// Funktion der Auslesung der Position von Chunks
+
+// Erstelle Kontext anhand der Sprache, wenn Sie vorhanden ist ansonsten füge dort Ressourcen ein.
+
+// Erstelle Ressource des neues Kontextes anhand der gefundende ID mit den Vergleich 
+
+// Erstelle Kategorie anhand der Sprache, wenn Sie vorhanden ist, ansonsten nicht erstellen.
+
+// Erstelle neue Chunks anhand der Sprache und verknüpfe Sie mit der Kategorie, wenn Sie vorhanden ist, ansonsten nicht erstellen.
+
+// Funktion der Einfügen des Textes zu der Ressource
+
+// Funktion des Einfügens des Textes in den Template-Variable des Ressoruces 
+
+// Funktion des Einfügen des Texten in den Chunks
+
+
 
 function MaliciousCode($content, $modx) {
     // Definiere Muster, nach denen im XML-Inhalt gesucht werden soll
