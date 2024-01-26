@@ -94,14 +94,12 @@ function getWebContextResources($modx) {
 
 // Funktion zum Vergleich der Ressource Content und TXT Inhalt
 function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
+    $linkArray = array();
 
     // rufe die Funktion zum Aufruf des ModX Kontext key 'web'
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Initialisiere Webkontext und Ressourcen...'); // DEBUG
     $webResources = getWebContextResources($modx);
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Webkontext und Ressourcen wurden geladen...'); // DEBUG
-
-    // Initialisiere das Verknüpfungsarray
-    $linkArray = array();
 
     // Durchlaufe alle TXT Dateien im ersten Ordner
     $filesA = scandir($txt_Doc_A);
@@ -114,7 +112,7 @@ function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
             $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
 
             // Vergleiche die Ressourcen Inhalte mit dem TXT Inhalt
-            $result = compareTexts($fileContent, $webResources, $ignoreTags, $modx, $filePath, $searchTerms);
+            $result = compareTexts($fileContent, $webResources, $ignoreTags, $modx);
 
             // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
             if (!empty($result)) {
@@ -128,96 +126,81 @@ function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
 }
 
 // Funktion zum Vergleich von Texten
-function compareTexts($fileContent, $webResources, $ignoreTags, $modx, $txtFilePath, $searchTerms) {
+function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
     $linkArray = array();
+    
+    // Rufe die Positionen für die Ressource und Textdatei ab
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ressourcenpositionen werden geladen');
+    $pos_Ressource = getPositionRessource($webResources, $ignoreTags, $modx);
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Textpositionen werden geladen');
+    $pos_Text = getPositionText($fileContent, $modx);
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ressource- und Textpositionen sind fertig.');
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Verknüpfung und Vergleich der Inhalte.');
 
-    // Durchlaufe alle Web-Ressourcen
-    foreach ($webResources as $resource) {
-        // Ignoriere Tags der Ressourcen Content
-        $resourceContent = strip_tags($resource['content'], implode('', $ignoreTags));
+    foreach ($pos_Ressource as $positionRessource) {
+        // Durchlaufe die ermittelten Positionen für den Text
+        foreach ($pos_Text as $positionText) {
+            // Vergleiche die Textinhalte genau mit strcmp
+            $comparison = strcmp($positionRessource['html_content'], $positionText['file_content']);
 
-        // Rufe die Positionen für die Ressource und Textdatei ab
-        $positions = getPosition($txtFilePath, $resourceContent, $fileContent, $ignoreTags, $modx, $searchTerms);
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Positionen aus getPosition: ' . print_r($positions, true)); // Debug
-        
-        // Überprüfe, ob Positionen vorhanden sind, bevor du weitermachst
-        if (!empty($positions['position_in_resource'])) {
-            // Durchlaufe die ermittelten Positionen
-            foreach ($positions['position_in_resource'] as $position) {
-                // Überprüfe, ob der Text in der Ressource Content vorhanden ist
-                $textInResource = mb_substr($resourceContent, $position['html_start'], $position['html_end'] - $position['html_start']);
-                
-                // Überprüfe, ob der Text in der Textdatei vorhanden ist
-                $textInTxtFile = mb_substr($fileContent, $position['file_start'], $position['file_end'] - $position['file_start']);
-                
-                // Vergleiche die beiden Texte
-                if ($textInResource == $textInTxtFile) {
-                    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Text in Ressource ID ' . $resource['id'] . ' stimmt mit dem Text in der TXT-Datei überein.');
-                    
-                    // Füge die Ressourcen ID, Positionen und Pfad zur TXT-Datei zum Verknüpfungsarray hinzu
-                    $linkArray[] = array(
-                        'resource_id' => $resource['id'],
-                        'position_in_resource' => $position['html_start'],
-                        'position_in_txt_file' => $position['file_start'],
-                        'txt_file_path' => $txtFilePath
-                    );
-                } else {
-                    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Nothit: Text in Ressource ID ' . $resource['id'] . ' stimmt nicht mit dem Text in der TXT-Datei überein.');
-                }
+            // Wenn die Texte genau übereinstimmen, füge es zum Verknüpfungsarray hinzu
+            if ($comparison === 0) {
+                $linkArray[] = array(
+                    'resource_id' => $positionRessource['id'],
+                    'position_in_resource' => $positionRessource['html_line'],
+                    'file_line' => $positionText['file_line'],
+                    'text_content' => $positionText['file_content']
+                );
+
+                // Du kannst den Vergleich für weitere Debugging-Zwecke loggen
+                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Exakter Textvergleich gefunden.');
+
+                // Breche die innere Schleife ab, da ein Match gefunden wurde
+                break;
             }
-        } else {
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Die Funktion getPosition hat keine Positionen zurückgegeben.');
         }
     }
-
-    // Gebe das Verknüpfungsarray zurück
     return $linkArray;
 }
 
-function getPosition($txtFilePath, $resourceContent, $fileContent, $ignoreTags, $modx, $searchTerms) {
-    $positions = array();
+function getPositionRessource($webResources, $ignoreTags, $modx) {
+    $pos_Ressource = array();
 
-    // Ignoriere Tags der Ressourcen Content
-    $cleanedResourceContent = strip_tags($resourceContent, implode('', $ignoreTags));
-    // Logge den bereinigten Ressourcen-Content
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Bereinigter Ressourcen-Content: ' . $cleanedResourceContent);
+    foreach ($webResources as $resource) {
+        // Ignoriere Tags der Ressourcen Content
+        $cleanedResourceContent = strip_tags($resource['content'], implode('', $ignoreTags));
 
-    // Texte reinigen und Tags entfernen
-    $cleanedFileContent = strip_tags($fileContent, implode('', $ignoreTags));
-
-    // Suche nach Positionen im HTML-Text
-    foreach ($searchTerms as $term) {
-        $start = strpos($cleanedResourceContent, $term);
-        $end = $start + strlen($term);
-        $positions[] = ['term' => $term, 'html_start' => $start, 'html_end' => $end];
-    }
-
-    // Suche nach Positionen in der Textdatei
-    foreach ($searchTerms as $term) {
-        $lines = explode("\n", $cleanedFileContent);
-
-        foreach ($lines as $i => $line) {
-            if (strpos($line, $term) !== false) {
-                $positions[] = [
-                    'term' => $term,
-                    'file_line' => $i + 1, // Line numbers start from 1
-                    'file_start' => strpos($line, $term),
-                    'file_end' => strpos($line, $term) + strlen($term)
-                ];
-            }
+        // Suche nach Positionen im HTML-Text
+        $linesResource = explode("\n", $cleanedResourceContent);
+        foreach ($linesResource as $i => $line) {
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'HTML Line ' . ($i + 1) . ': ' . $line);
+            $pos_Ressource[] = [
+                'id' => $resource['id'],
+                'html_line' => $i + 1, // Line numbers start from 1
+                'html_content' => $line,
+            ];
         }
     }
 
-    // Logge die Positionen
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Positionen: ' . print_r($positions, true));
+    // Hier hast du nun alle Positionen mit den Zeilennummern und den Inhalten der Zeilen
+    return $pos_Ressource;
+}
 
-    // Weitere Verarbeitung der Positionen hier...
+function getPositionText($fileContent, $modx) {
+    $pos_Text = array();
 
-    // Rückgabe der Positionen
-    return array(
-        'position_in_resource' => $positions,
-        'txt_file_path' => $txtFilePath
-    );
+    // Suche nach Positionen in der Textdatei
+    $linesFile = explode("\n", $fileContent);
+    foreach ($linesFile as $i => $line) {
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'File Line ' . ($i + 1) . ': ' . $line);
+        $pos_Text[] = [
+            'file_line' => $i + 1, // Line numbers start from 1
+            'file_content' => $line,
+        ];
+    }
+
+    // Hier hast du nun alle Positionen mit den Zeilennummern und den Inhalten der Zeilen
+    return $pos_Text;
 }
 
 function MaliciousCode($content, $modx) {
