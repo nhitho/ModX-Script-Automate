@@ -62,41 +62,6 @@ else {
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler: Die TXT-Ordner (A oder B) existieren nicht.');
 }
 
-// Funktion zum Vergleich der Ressource Content und TXT Inhalt
-function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
-
-    // rufe die Funktion zum Aufruf des ModX Kontext key 'web'
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Initialisiere Webkontext und Ressourcen...'); // DEBUG
-    $webResources = getWebContextResources($modx);
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Webkontext und Ressourcen wurden geladen...'); // DEBUG
-
-    // Initialisiere das Verknüpfungsarray
-    $linkArray = array();
-
-    // Durchlaufe alle TXT Dateien im ersten Ordner
-    $filesA = scandir($txt_Doc_A);
-    foreach ($filesA as $file) {
-        if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
-             $filePath = $txt_Doc_A . '/' . $file;
-             // Lese der Txt-Datei lesen
-             $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
-             $fileContent = file_get_contents($filePath);
-             $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
-
-             // Vergleiche die Ressourcen Inhalte mit dem TXT Inhalt
-             $result = compareTexts($fileContent, $webResources, $ignoreTags, $modx, $filePath);
-
-             // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
-             if (!empty($result)) {
-                 $linkArray = array_merge($linkArray, $result);
-             }
-        }
-    }
-
-    // Gebe das Verknüpfungsarray zurück
-    return $linkArray;
-}
-
 // Funktion zum Aufruf des Modx Kontext key 'web'
 function getWebContextResources($modx) {
     
@@ -127,54 +92,134 @@ function getWebContextResources($modx) {
     return $resultArray;
 }
 
-// Funktion zum Vergleich von Texten
-function compareTexts($txtContent, $webResources, $ignoreTags, $modx, $txtFilePath) {
+// Funktion zum Vergleich der Ressource Content und TXT Inhalt
+function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
+
+    // rufe die Funktion zum Aufruf des ModX Kontext key 'web'
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Initialisiere Webkontext und Ressourcen...'); // DEBUG
+    $webResources = getWebContextResources($modx);
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Webkontext und Ressourcen wurden geladen...'); // DEBUG
+
+    // Initialisiere das Verknüpfungsarray
     $linkArray = array();
 
+    // Durchlaufe alle TXT Dateien im ersten Ordner
+    $filesA = scandir($txt_Doc_A);
+    foreach ($filesA as $file) {
+        if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
+            $filePath = $txt_Doc_A . '/' . $file;
+            // Lese der Txt-Datei lesen
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
+            $fileContent = file_get_contents($filePath);
+            $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
+
+            // Vergleiche die Ressourcen Inhalte mit dem TXT Inhalt
+            $result = compareTexts($fileContent, $webResources, $ignoreTags, $modx, $filePath, $searchTerms);
+
+            // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
+            if (!empty($result)) {
+                $linkArray = array_merge($linkArray, $result);
+            }
+        }
+    }
+
+    // Gebe das Verknüpfungsarray zurück
+    return $linkArray;
+}
+
+// Funktion zum Vergleich von Texten
+function compareTexts($fileContent, $webResources, $ignoreTags, $modx, $txtFilePath, $searchTerms) {
+    $linkArray = array();
+
+    // Durchlaufe alle Web-Ressourcen
     foreach ($webResources as $resource) {
         // Ignoriere Tags der Ressourcen Content
         $resourceContent = strip_tags($resource['content'], implode('', $ignoreTags));
 
-        // Texte reinigen und Tags entfernen
-        $cleanedResourceContent = preg_replace('/<\/?[^>]+>/', '', $resourceContent);
-        $cleanedResourceContent = str_replace(["\r", "\n"], '', $cleanedResourceContent);
-
-        // Wort-für-Wort-Vergleich
-        $resourceWords = explode(' ', $cleanedResourceContent);
-        $txtWords = explode(' ', $txtContent);
-
-        // Vergleich der Worte
-        $commonWords = array_intersect($resourceWords, $txtWords);
-        $wordSimilarity = count($commonWords) / max(count($resourceWords), count($txtWords)) * 100;
-
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Wort-Ähnlichkeitsprozentsatz: ' . $wordSimilarity);
-
-        if ($wordSimilarity > 80) {
-            // Stimmen diese überein, speichere die Position des jeweiligen Quelle
-            // Füge dort die entsprechende Ressourcen ID hinzu als Verknüpfung
-            $positionInResource = mb_strpos($resourceContent, strip_tags($txtContent));
-            $positionInTxtFile = mb_strpos(strip_tags($txtContent), strip_tags($resourceContent));
-
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Common Words: ' . implode(' ', $commonWords));
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Resource Content: ' . $cleanedResourceContent);
-
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Inhalt von Ressource ID ' . $resource['id'] . ' stimmt mit dem Inhalt der TXT-Datei überein.');
-            // Füge die Ressourcen ID, Positionen und Pfad zur TXT-Datei zum Verknüpfungsarray hinzu
-            $linkArray[] = array(
-                'resource_id' => $resource['id'],
-                'position_in_resource' => $positionInResource,
-                'position_in_txt_file' => $positionInTxtFile,
-                'txt_file_path' => $txtFilePath
-            );
+        // Rufe die Positionen für die Ressource und Textdatei ab
+        $positions = getPosition($txtFilePath, $resourceContent, $fileContent, $ignoreTags, $modx, $searchTerms);
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Positionen aus getPosition: ' . print_r($positions, true)); // Debug
+        
+        // Überprüfe, ob Positionen vorhanden sind, bevor du weitermachst
+        if (!empty($positions['position_in_resource'])) {
+            // Durchlaufe die ermittelten Positionen
+            foreach ($positions['position_in_resource'] as $position) {
+                // Überprüfe, ob der Text in der Ressource Content vorhanden ist
+                $textInResource = mb_substr($resourceContent, $position['html_start'], $position['html_end'] - $position['html_start']);
+                
+                // Überprüfe, ob der Text in der Textdatei vorhanden ist
+                $textInTxtFile = mb_substr($fileContent, $position['file_start'], $position['file_end'] - $position['file_start']);
+                
+                // Vergleiche die beiden Texte
+                if ($textInResource == $textInTxtFile) {
+                    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Text in Ressource ID ' . $resource['id'] . ' stimmt mit dem Text in der TXT-Datei überein.');
+                    
+                    // Füge die Ressourcen ID, Positionen und Pfad zur TXT-Datei zum Verknüpfungsarray hinzu
+                    $linkArray[] = array(
+                        'resource_id' => $resource['id'],
+                        'position_in_resource' => $position['html_start'],
+                        'position_in_txt_file' => $position['file_start'],
+                        'txt_file_path' => $txtFilePath
+                    );
+                } else {
+                    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Nothit: Text in Ressource ID ' . $resource['id'] . ' stimmt nicht mit dem Text in der TXT-Datei überein.');
+                }
+            }
         } else {
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Common Words: ' . implode(' ', $commonWords));
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Resource Content: ' . $cleanedResourceContent);
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Nothit: Inhalt von Ressource ID ' . $resource['id'] . ' stimmt nicht mit dem Inhalt der TXT-Datei überein.');
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Die Funktion getPosition hat keine Positionen zurückgegeben.');
         }
     }
 
+    // Gebe das Verknüpfungsarray zurück
     return $linkArray;
 }
+
+function getPosition($txtFilePath, $resourceContent, $fileContent, $ignoreTags, $modx, $searchTerms) {
+    $positions = array();
+
+    // Ignoriere Tags der Ressourcen Content
+    $cleanedResourceContent = strip_tags($resourceContent, implode('', $ignoreTags));
+    // Logge den bereinigten Ressourcen-Content
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Bereinigter Ressourcen-Content: ' . $cleanedResourceContent);
+
+    // Texte reinigen und Tags entfernen
+    $cleanedFileContent = strip_tags($fileContent, implode('', $ignoreTags));
+
+    // Suche nach Positionen im HTML-Text
+    foreach ($searchTerms as $term) {
+        $start = strpos($cleanedResourceContent, $term);
+        $end = $start + strlen($term);
+        $positions[] = ['term' => $term, 'html_start' => $start, 'html_end' => $end];
+    }
+
+    // Suche nach Positionen in der Textdatei
+    foreach ($searchTerms as $term) {
+        $lines = explode("\n", $cleanedFileContent);
+
+        foreach ($lines as $i => $line) {
+            if (strpos($line, $term) !== false) {
+                $positions[] = [
+                    'term' => $term,
+                    'file_line' => $i + 1, // Line numbers start from 1
+                    'file_start' => strpos($line, $term),
+                    'file_end' => strpos($line, $term) + strlen($term)
+                ];
+            }
+        }
+    }
+
+    // Logge die Positionen
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Positionen: ' . print_r($positions, true));
+
+    // Weitere Verarbeitung der Positionen hier...
+
+    // Rückgabe der Positionen
+    return array(
+        'position_in_resource' => $positions,
+        'txt_file_path' => $txtFilePath
+    );
+}
+
 function MaliciousCode($content, $modx) {
     // Definiere Muster, nach denen im XML-Inhalt gesucht werden soll
     $keywords_pattern = array(
