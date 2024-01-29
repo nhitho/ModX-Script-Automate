@@ -215,12 +215,14 @@ function getTVfromRessource() {}
 
 function getChunksContent() {
 
-getPositionChunks();
-getPositionText($fileContent, $modx);
+$pos_Chunks = getPositionChunks();
+$pos_Text = getPositionText($fileContent, $modx);
 
 }
 
-function getPositonChunks() {}
+function getPositonChunks() {
+$pos_Chunks();
+}
 
 // Erstelle Kontext anhand der Sprache, wenn Sie vorhanden ist ansonsten füge dort Ressourcen ein.
 
