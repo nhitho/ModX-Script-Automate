@@ -205,25 +205,74 @@ function getPositionText($fileContent, $modx) {
     return $pos_Text;
 }
 
-// Funktion der Auslersung der Position vom Template-Variable des Ressoruces 
+/* Funktionenbeispiel Anfang */
+
+// Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
+
+function getTVfromRessource() {}
 
 // Funktion der Auslesung der Position von Chunks
 
+function getChunksContent() {
+
+getPositionChunks();
+getPositionText($fileContent, $modx);
+
+}
+
+function getPositonChunks() {}
+
 // Erstelle Kontext anhand der Sprache, wenn Sie vorhanden ist ansonsten füge dort Ressourcen ein.
+
+function CheckContext() {
+if() {
+    
+}
+else {
+    if(){
+    }
+    else{
+    }
+}
+
+}
 
 // Erstelle Ressource des neues Kontextes anhand der gefundende ID mit den Vergleich 
 
+function CopyRessourcetoContext (){
+    
+}
+
 // Erstelle Kategorie anhand der Sprache, wenn Sie vorhanden ist, ansonsten nicht erstellen.
 
+function CheckorCreateCatogorie(){
+
+fileNameLangExtract ()
+}
+
+function fileNameLangExtract (){
+}
 // Erstelle neue Chunks anhand der Sprache und verknüpfe Sie mit der Kategorie, wenn Sie vorhanden ist, ansonsten nicht erstellen.
+
+function DuplicateOrUpdateChunks () {
+    CheckorCreateCatogorie();
+    getChunksContent();
+}
 
 // Funktion der Einfügen des Textes zu der Ressource
 
+function InsertTextToRessource (){}
+
 // Funktion des Einfügens des Textes in den Template-Variable des Ressoruces 
+
+function InsertTextToTV(){}
 
 // Funktion des Einfügen des Texten in den Chunks
 
+function InsertTextToChunks(){}
 
+
+/* Funktionenbeispiel Ende */
 
 function MaliciousCode($content, $modx) {
     // Definiere Muster, nach denen im XML-Inhalt gesucht werden soll
