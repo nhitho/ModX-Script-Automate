@@ -122,3 +122,9 @@ function createChunkWithCategory($modx, $chunkName, $language) {
         return $existingChunk->get('id');
     }
 }
+
+// Funktion der Einfügen des Textes zu der Ressource
+
+// Funktion des Einfügens des Textes in den Template-Variable des Ressoruces 
+
+// Funktion des Einfügen des Texten in den Chunks
