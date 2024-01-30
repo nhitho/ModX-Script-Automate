@@ -16,11 +16,20 @@ $txt_Doc_B = MODX_BASE_PATH . 'assets/txt-languages';
 // Tags zum Ignorieren
 $ignoreTags = array('<.*>');
 
+/*
+    Es gibt einige Zeilen die mit "// Debug : *" beginnen.
+    Um die Debugmodus zu kommentieren benutze entweder # oder // vor der Funktion.
+    Einige LOG_LEVEL_ERROR besiten kein Kommentar mit Debug. Die sollten natürlich nicht auskommentiert werden.
+*/
+
 
 // Überprüfe, ob die TXT-Ordner existieren
 if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
+    
+    //Debug: Initialsisierung
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Die TXT-Ordner existieren.'); 
-     // Durchlaufe alle TXT Dateien im ersten Ordner
+    
+    // Durchlaufe alle TXT Dateien im ersten Ordner
     $filesA = scandir($txt_Doc_A);
     foreach ($filesA as $file) {
         if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
@@ -29,54 +38,78 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
             // Lese der Txt-Datei lesen
             $fileContent = file_get_contents($filePath);
             $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Überprüfung des Schädlichen Code bei '. $file );
+            
             // Funktion zur Überprüfung auf schädlichen Code
             MaliciousCode($fileContent, $modx);
+            
+            // Debug: Ausgabe
             $modx->log(xPDO::LOG_LEVEL_ERROR, 'Überprüfung der originalen Datei ist abgeschlossen');
         }
     }
-     // Durchlaufe alle TXT Dateien im zweiten Ordner
-     $filesB = scandir($txt_Doc_B);
-     foreach ($filesB as $file) {
-         if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
-             $filePath = $txt_Doc_B . '/' . $file;
+    // Durchlaufe alle TXT Dateien im zweiten Ordner
+    $filesB = scandir($txt_Doc_B);
+    foreach ($filesB as $file) {
+        if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
+            $filePath = $txt_Doc_B . '/' . $file;
  
             // Lese der Txt-Datei lesen
             $fileContent = file_get_contents($filePath);
             $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Überprüfung des Schädlichen Code bei '. $file );
+            
             // Funktion zur Überprüfung auf schädlichen Code
             MaliciousCode($fileContent, $modx);
+
+            // Debug: Ausgabe
             $modx->log(xPDO::LOG_LEVEL_ERROR, 'Überprüfung der Datei '. $file.' ist abgeschlossen');
         }
     }
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'TXT-Dateien geladen: ' . print_r($filesA, true) . ' | ' . print_r($filesB, true)); // DEBUG
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Funktion Textvergleich wird initialisiert...');  
+    // Debug: Ausgabe
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'TXT-Dateien geladen: ' . print_r($filesA, true) . ' | ' . print_r($filesB, true)); 
+    
+    // Debug: Ausgabe
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Funktion Textvergleich wird initialisiert...');  
+    
     $links = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx);
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet'); // DEBUG
-    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($links, true)); // DEBUG
+    
+    // Debug: Ausgabe
+    #$modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet');
+
+    // Debug: Ausgabe
+    #$modx->log(xPDO::LOG_LEVEL_ERROR, print_r($links, true));
 }
+
 else {
-    // Logge den Fehler für spätere Analyse
+    // Debug: Ausgabe
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler: Die TXT-Ordner existieren nicht.');
 
-    // Du kannst auch eine spezifische Fehlermeldung für dein Log verwenden
+    // Debug: Wenn A oder B nicht existieren.
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler: Die TXT-Ordner (A oder B) existieren nicht.');
 }
 
 // Funktion zum Aufruf des Modx Kontext key 'web'
 function getWebContextResources($modx) {
     
-    // Rufe ModX Kontext auf
+    // Debug: Ausgabe
     # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Rufe Kontext "web" auf.'); // DEBUG
+    
+    // Rufe ModX Kontext auf
     $webContext = $modx->getContext('web');
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Web-Kontext geladen: ' . print_r($webContext, true)); // DEBUG
+
+    // Debug: Ausgabe
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Web-Kontext geladen: ' . print_r($webContext, true));
+
+    // Debug: Ausgabe
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Lade die Ressourcen');
 
     // Rufe die darin enthaltenen Ressourcen auf
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Lade die Ressourcen'); // DEBUG
     if (!$resources = $modx->getCollection('modResource', array('context_key' => 'web'))){
         $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Laden der Ressourcen: ' . $webContext->error); 
     }
+    
+    // Debug: Ausgabe
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Speichert die Inhalte.');
+
     // Speichere ID, Content, Titel, Alias in einen Array ab
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Speichert die Inhalte'); // DEBUG
     $resultArray = array();
     foreach ($resources as $resource) {
         $resultArray[] = array(
@@ -86,8 +119,11 @@ function getWebContextResources($modx) {
             'alias' => $resource->get('alias')
         );
     }
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet'); // DEBUG
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($resultArray, true)); // DEBUG
+    
+    // Debug: Ausgabe 
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet'); 
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($resultArray, true));
+
     // Gebe den Array zurück
     return $resultArray;
 }
@@ -96,20 +132,29 @@ function getWebContextResources($modx) {
 function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
     $linkArray = array();
 
-    // rufe die Funktion zum Aufruf des ModX Kontext key 'web'
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Initialisiere Webkontext und Ressourcen...'); // DEBUG
+    // Debug: Ausgabe 
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Initialisiere Webkontext und Ressourcen...');
+
+    // Rufe die Funktion zum Aufruf des ModX Kontext key 'web'
     $webResources = getWebContextResources($modx);
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Webkontext und Ressourcen wurden geladen...'); // DEBUG
+    
+    // Debug: Ausgabe 
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Webkontext und Ressourcen wurden geladen...'); 
 
     // Durchlaufe alle TXT Dateien im ersten Ordner
     $filesA = scandir($txt_Doc_A);
     foreach ($filesA as $file) {
         if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
             $filePath = $txt_Doc_A . '/' . $file;
+            
+            // Debug: Ausgabe 
+            # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
+            
             // Lese der Txt-Datei lesen
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
             $fileContent = file_get_contents($filePath);
-            $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
+
+            // Debug: Ausgabe 
+            # $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
 
             // Vergleiche die Ressourcen Inhalte mit dem TXT Inhalt
             $result = compareTexts($fileContent, $webResources, $ignoreTags, $modx);
@@ -129,17 +174,29 @@ function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
 function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
     $linkArray = array();
     
-    // Rufe die Positionen für die Ressource und Textdatei ab
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ressourcenpositionen werden geladen');
+    // Debug: Ausgabe
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ressourcenpositionen werden geladen');
+    
+    // Rufe die Positionen für die Ressource auf.
     $pos_Ressource = getPositionRessource($webResources, $ignoreTags, $modx);
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Textpositionen werden geladen');
+    
+    // Debug: Ausgabe
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Textpositionen werden geladen');
+    
+    // Rufe die Positionen für die Datei auf.
     $pos_Text = getPositionText($fileContent, $modx);
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ressource- und Textpositionen sind fertig.');
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Verknüpfung und Vergleich der Inhalte.');
+    
+    // Debug: Ausgabe
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ressource- und Textpositionen sind fertig.');
+    
+    // Debug: Ausgabe
+    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Verknüpfung und Vergleich der Inhalte.');
 
     foreach ($pos_Ressource as $positionRessource) {
+        
         // Durchlaufe die ermittelten Positionen für den Text
         foreach ($pos_Text as $positionText) {
+            
             // Vergleiche die Textinhalte genau mit strcmp
             $comparison = strcmp($positionRessource['html_content'], $positionText['file_content']);
 
@@ -152,7 +209,7 @@ function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
                     'text_content' => $positionText['file_content']
                 );
 
-                // Du kannst den Vergleich für weitere Debugging-Zwecke loggen
+                // Debug: Ausgabe
                 $modx->log(xPDO::LOG_LEVEL_ERROR, 'Exakter Textvergleich gefunden.');
 
                 // Breche die innere Schleife ab, da ein Match gefunden wurde
@@ -174,10 +231,13 @@ function getPositionRessource($webResources, $ignoreTags, $modx) {
         // Suche nach Positionen im HTML-Text
         $linesResource = explode("\n", $cleanedResourceContent);
         foreach ($linesResource as $i => $line) {
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'HTML Line ' . ($i + 1) . ': ' . $line);
+
+            // Debug: Ausgabe
+            # $modx->log(xPDO::LOG_LEVEL_ERROR, 'HTML Line ' . ($i + 1) . ': ' . $line);
+            
             $pos_Ressource[] = [
                 'id' => $resource['id'],
-                'html_line' => $i + 1, // Line numbers start from 1
+                'html_line' => $i + 1, // Startet mit 1
                 'html_content' => $line,
             ];
         }
@@ -194,9 +254,12 @@ function getPositionText($fileContent, $modx) {
     // Suche nach Positionen in der Textdatei
     $linesFile = explode("\n", $fileContent);
     foreach ($linesFile as $i => $line) {
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'File Line ' . ($i + 1) . ': ' . $line);
+
+        // Debug: Ausgabe
+        # $modx->log(xPDO::LOG_LEVEL_ERROR, 'File Line ' . ($i + 1) . ': ' . $line);
+        
         $pos_Text[] = [
-            'file_line' => $i + 1, // Line numbers start from 1
+            'file_line' => $i + 1, // Startet mit 1
             'file_content' => $line,
         ];
     }
@@ -206,6 +269,34 @@ function getPositionText($fileContent, $modx) {
 }
 
 /* Funktionenbeispiel Anfang */
+
+// Filenamen Extrahieren für Sprache
+
+function fileNameLangExtract ($filePath, $modx){
+    
+    //Debug: Initialisierung
+    $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wird extrahiert aus den Dateinamen...");
+
+    // Suchmuster für Sprachenkürzel
+    $pattern = '/^[^-]+-(.*?)-[a-zA-Z]+\.txt/';
+
+    // Lese der Txt-Datei lesen
+    $fileContent = file_get_contents($filePath);
+
+    // Überprüfe, ob das Muster in der Datei gefunden wird
+    if (preg_match($pattern, $fileContent, $matches)) {
+        
+        $LangInit = $matches[1];
+        
+        // Debug: Anzeige des Inhalts von $LangInit
+        $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wurde extrahiert: $LangInit");
+        
+        return $LangInit;
+    }
+
+    $modx->log(xPDO::LOG_LEVEL_ERROR, "Kein Sprachenkürzel gefunden.");
+    return null;
+}
 
 // Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
 
@@ -227,15 +318,7 @@ $pos_Chunks();
 // Erstelle Kontext anhand der Sprache, wenn Sie vorhanden ist ansonsten füge dort Ressourcen ein.
 
 function CheckContext() {
-if() {
-    
-}
-else {
-    if(){
-    }
-    else{
-    }
-}
+
 
 }
 
@@ -249,11 +332,9 @@ function CopyRessourcetoContext (){
 
 function CheckorCreateCatogorie(){
 
-fileNameLangExtract ()
+fileNameLangExtract();
 }
 
-function fileNameLangExtract (){
-}
 // Erstelle neue Chunks anhand der Sprache und verknüpfe Sie mit der Kategorie, wenn Sie vorhanden ist, ansonsten nicht erstellen.
 
 function DuplicateOrUpdateChunks () {
