@@ -72,10 +72,10 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
     $links = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx);
     
     // Debug: Ausgabe
-    #$modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet');
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet');
 
     // Debug: Ausgabe
-    #$modx->log(xPDO::LOG_LEVEL_ERROR, print_r($links, true));
+    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($links, true));
 }
 
 else {
@@ -109,20 +109,24 @@ function getWebContextResources($modx) {
     // Debug: Ausgabe
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Speichert die Inhalte.');
 
-    // Speichere ID, Content, Titel, Alias in einen Array ab
+    // Speichere ID, Content, Titel, Alias und Template-Variablen in einen Array ab
     $resultArray = array();
     foreach ($resources as $resource) {
+        $tvArray = getTVfromRessource($resource);
+
+         // Füge Informationen zur Ressource inkl. Template-Variablen dem Ergebnisarray hinzu
         $resultArray[] = array(
             'id' => $resource->get('id'),
             'content' => $resource->get('content'),
             'title' => $resource->get('pagetitle'),
-            'alias' => $resource->get('alias')
+            'alias' => $resource->get('alias'),
+            'template_vars' => $tvArray,
         );
     }
     
     // Debug: Ausgabe 
     # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet'); 
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($resultArray, true));
+    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($resultArray, true));
 
     // Gebe den Array zurück
     return $resultArray;
@@ -300,7 +304,24 @@ function fileNameLangExtract ($filePath, $modx){
 
 // Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
 
-function getTVfromRessource() {}
+function getTVfromRessource($resource) {
+    $tvArray = array();
+
+    // Lese alle Template-Variablen der Ressource
+    $tvList = $resource->getTemplateVars();
+
+    // Durchlaufe die Template-Variablen und speichere sie in einem Array
+    foreach ($tvList as $tv) {
+        $tvArray[] = array(
+            'tv_id' => $tv->get('id'),
+            'tv_name' => $tv->get('name'),
+            'tv_value' => $tv->get('value'),
+        );
+    }
+
+    // Gebe das Array mit den Template-Variablen zurück
+    return $tvArray;
+}
 
 // Funktion der Auslesung der Position von Chunks
 
