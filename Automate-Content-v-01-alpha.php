@@ -323,6 +323,60 @@ function getTVfromRessource($resource) {
     return $tvArray;
 }
 
+function compareTVTextsWithTxt($txt_Doc_A, $ignoreTags, $modx, $tvArray) {
+    $linkArray = array();
+
+    foreach ($tvArray as $tv) {
+        
+        // Debug: Ausgabe
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Positionen für TV-Text werden geladen');
+
+        // Rufe die Positionen für den Text und Template-Variablen-Inhalt ab
+        $pos_TVText = getPositionTV($tv['tv_value'], $modx);
+        
+        // Debug: Ausgabe
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'TV-Textpositionen sind fertig.');
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Verknüpfung und Vergleich der TV-Inhalte.');
+
+        // Durchlaufe alle TXT Dateien im ersten Ordner
+        $filesA = scandir($txt_Doc_A);
+        foreach ($filesA as $file) {
+            if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
+                $filePath = $txt_Doc_A . '/' . $file;
+                
+                // Debug: Ausgabe
+                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
+                
+                // Lese der Txt-Datei lesen
+                $fileContent = file_get_contents($filePath);
+                
+                // Debug: Ausgabe
+                $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
+
+                // Vergleiche die Template-Variablen-Inhalte mit dem TXT Inhalt
+                $result = compareTexts($fileContent, $pos_TVText, $ignoreTags, $modx);
+
+                // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
+                if (!empty($result)) {
+                    $linkArray = array_merge($linkArray, $result);
+                }
+            }
+        }
+    }
+
+    // Gebe das Verknüpfungsarray zurück
+    return $linkArray;
+}
+
+function getPositionTV() {
+    $pos_TVText = array();
+
+
+
+    return $pos_TVText;
+}
+
+
 // Funktion der Auslesung der Position von Chunks
 
 function getChunksContent() {
@@ -333,7 +387,7 @@ $pos_Text = getPositionText($fileContent, $modx);
 }
 
 function getPositonChunks() {
-$pos_Chunks();
+$pos_Chunks= array();
 }
 
 // Erstelle Kontext anhand der Sprache, wenn Sie vorhanden ist ansonsten füge dort Ressourcen ein.
