@@ -101,13 +101,16 @@ function getWebContextResources($modx) {
     // Debug: Ausgabe
     # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Lade die Ressourcen');
 
+    // Rufe TV Variablen vom Resourcen dazu
+    
+
     // Rufe die darin enthaltenen Ressourcen auf
     if (!$resources = $modx->getCollection('modResource', array('context_key' => 'web'))){
         $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Laden der Ressourcen: ' . $webContext->error); 
     }
     
     // Debug: Ausgabe
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Speichert die Inhalte.');
+    #$modx->log(xPDO::LOG_LEVEL_ERROR, 'Speichert die Inhalte.');
 
     // Speichere ID, Content, Titel, Alias und Template-Variablen in einen Array ab
     $resultArray = array();
@@ -303,7 +306,6 @@ function fileNameLangExtract ($filePath, $modx){
 }
 
 // Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
-
 function getTVfromRessource($resource) {
     $tvArray = array();
 
@@ -323,6 +325,25 @@ function getTVfromRessource($resource) {
     return $tvArray;
 }
 
+// Funktion zum Extrahieren des Textinhalts aus dem JSON-ähnlichen String
+function filterTextFromTV($jsonString) {
+    // Hier definieren wir ein einfaches Pattern, das "name:" oder "CaptionText:" und den Text danach erfasst
+    $pattern = '/"name":"(.*?)"|"CaptionText":"(.*?)"/';
+
+    // Hier führen wir eine preg_match_all durch, um alle Übereinstimmungen zu finden
+    preg_match_all($pattern, $jsonString, $matches);
+
+    // Hier kombinieren wir die Übereinstimmungen für "name:" und "CaptionText:"
+    $combinedMatches = array_merge($matches[1], $matches[2]);
+
+    // Hier filtern wir leere Einträge heraus
+    $filteredMatches = array_filter($combinedMatches);
+
+    // Hier geben wir den ersten Nicht-leeren Eintrag zurück oder null, wenn keiner vorhanden ist
+    return reset($filteredMatches) ?: null;
+}
+
+// Vergleich mit TV Array und Datei Text
 function compareTVTextsWithTxt($txt_Doc_A, $ignoreTags, $modx, $tvArray) {
     $linkArray = array();
 
