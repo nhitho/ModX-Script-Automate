@@ -16,12 +16,14 @@ $txt_Doc_B = MODX_BASE_PATH . 'assets/txt-languages';
 // Tags zum Ignorieren
 $ignoreTags = array('<.*>');
 
-/*
-    Es gibt einige Zeilen die mit "// Debug : *" beginnen.
-    Um die Debugmodus zu kommentieren benutze entweder # oder // vor der Funktion.
-    Einige LOG_LEVEL_ERROR besiten kein Kommentar mit Debug. Die sollten natürlich nicht auskommentiert werden.
-*/
+#
+#    Es gibt einige Zeilen die mit "// Debug : *" beginnen.
+#    Um die Debugmodus zu kommentieren benutze entweder # oder // vor der Funktion.
+#    Einige LOG_LEVEL_ERROR besiten kein Kommentar mit Debug. Die sollten natürlich nicht auskommentiert werden.
+#
 
+
+/*                 Hauptfunktion                              */
 
 // Überprüfe, ob die TXT-Ordner existieren
 if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
@@ -76,8 +78,7 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
 
     // Debug: Ausgabe
     $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($links, true));
-}
-
+} 
 else {
     // Debug: Ausgabe
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler: Die TXT-Ordner existieren nicht.');
@@ -85,6 +86,82 @@ else {
     // Debug: Wenn A oder B nicht existieren.
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler: Die TXT-Ordner (A oder B) existieren nicht.');
 }
+
+/*                 Voreinstellungen Filter Funktionen                   */
+
+// Filenamen Extrahieren für Sprache
+function fileNameLangExtract ($filePath, $modx){
+    
+    //Debug: Initialisierung
+    $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wird extrahiert aus den Dateinamen...");
+
+    // Suchmuster für Sprachenkürzel
+    $pattern = '/^[^-]+-(.*?)-[a-zA-Z]+\.txt/';
+
+    // Lese der Txt-Datei lesen
+    $fileContent = file_get_contents($filePath);
+
+    // Überprüfe, ob das Muster in der Datei gefunden wird
+    if (preg_match($pattern, $fileContent, $matches)) {
+        
+        $LangInit = $matches[1];
+        
+        // Debug: Anzeige des Inhalts von $LangInit
+        $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wurde extrahiert: $LangInit");
+        
+        return $LangInit;
+    }
+
+    $modx->log(xPDO::LOG_LEVEL_ERROR, "Kein Sprachenkürzel gefunden.");
+    return null;
+}
+
+// Funktion zum Extrahieren des Textinhalts aus dem JSON-ähnlichen String
+function filterTextFromTV($jsonString) {
+    // Hier definieren wir ein einfaches Pattern, das "name:" oder "CaptionText:" und den Text danach erfasst
+    $pattern = '/"name":"(.*?)"|"CaptionText":"(.*?)"/';
+
+    // Hier führen wir eine preg_match_all durch, um alle Übereinstimmungen zu finden
+    preg_match_all($pattern, $jsonString, $matches);
+
+    // Hier kombinieren wir die Übereinstimmungen für "name:" und "CaptionText:"
+    $combinedMatches = array_merge($matches[1], $matches[2]);
+
+    // Hier filtern wir leere Einträge heraus
+    $filteredMatches = array_filter($combinedMatches);
+
+    // Hier geben wir den ersten Nicht-leeren Eintrag zurück oder null, wenn keiner vorhanden ist
+    return reset($filteredMatches) ?: null;
+}
+
+// Funktion zur Überprüfung der Dateien
+function MaliciousCode($content, $modx) {
+    // Definiere Muster, nach denen im XML-Inhalt gesucht werden soll
+    $keywords_pattern = array(
+        'SQL' => '/\b(?:UPDATE|DELETE|DROP|CREATE|ALTER)\b/i',                              // SQL-Injection
+        'JavaScript/HTML' => '/<script\b[^>]*>.*<\/script>/i',                              // JavaScript/HTML-Injection
+        'PHP' => '/<\?php.*\?>/i',                                                          // PHP-Code
+        'PHP Object Injection' => '/\b(?:unserialize|__wakeup|Serializable)\b/i',           // PHP Object Injection
+        'Kommentierte PHP-Tags' => '/<!--.*<\?php.*-->.*-->/s',                             // Kommentierte PHP-Tags
+        'Dateieinbindung' => '/<\?include.*\?>/i',                                          // Dateieinbindung
+        'Systembefehle' => '/\b(?:system|exec|shell_exec|passthru)\b/i',                    // Systembefehle
+        'XSS' => '/\b(?:alert|prompt|confirm|document\.write)\b/i',                         // XSS
+        'XSS' => '/<(script|img|svg|iframe|input|a|form|embed|object|style|meta).*?>/i',    // XSS
+        'Base64' => '/base64_decode\s*\(\s*["\']?[a-zA-Z0-9+\/=]+["\']?\s*\)/i',            // Base64-kodierte Inhalte
+        'Path Traversal' => '/\.\.(?:\/|\\|%2F|%5C)/i',                                     // Strukturaufrufe
+        'Remote Code Execution' => '/\b(?:eval|assert|system|exec|shell_exec|passthru)\b/i',// Remote-Code
+        'CSRF' => '/<input.*\s+name=[\'"]?token[\'"]?.*?>/i',                               // Token
+        );
+
+    foreach ($keywords_pattern as $key => $pattern) {
+        if (preg_match($pattern, $content, $matches)) {
+            // Schädlichen Code gefunden, logge einen Fehler mit den Informationen über den gefundenen Code
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Schädlicher Code gefunden: ' . $key . '. Gefundener Code: ' . print_r($matches, true));
+        }
+    }
+}
+
+/*                 Funktionen für Einscannen der Quellen                */
 
 // Funktion zum Aufruf des Modx Kontext key 'web'
 function getWebContextResources($modx) {
@@ -134,6 +211,34 @@ function getWebContextResources($modx) {
     // Gebe den Array zurück
     return $resultArray;
 }
+
+// Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
+function getTVfromRessource($resource) {
+    $tvArray = array();
+
+    // Lese alle Template-Variablen der Ressource
+    $tvList = $resource->getTemplateVars();
+
+    // Durchlaufe die Template-Variablen und speichere sie in einem Array
+    foreach ($tvList as $tv) {
+        $tvArray[] = array(
+            'tv_id' => $tv->get('id'),
+            'tv_name' => $tv->get('name'),
+            'tv_value' => $tv->get('value'),
+        );
+    }
+
+    // Gebe das Array mit den Template-Variablen zurück
+    return $tvArray;
+}
+
+// Funktion der Auslesung der Position von Chunks
+function getChunksContent() {
+    $pos_Chunks = getPositionChunks();
+    $pos_Text = getPositionText($fileContent, $modx);
+}
+
+/*                  Vergleich der Quellen                                */
 
 // Funktion zum Vergleich der Ressource Content und TXT Inhalt
 function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
@@ -227,6 +332,56 @@ function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
     return $linkArray;
 }
 
+// Vergleich mit TV Array und Datei Text
+function compareTVTextsWithTxt($txt_Doc_A, $ignoreTags, $modx, $tvArray) {
+    $linkArray = array();
+
+    foreach ($tvArray as $tv) {
+        
+        // Debug: Ausgabe
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Positionen für TV-Text werden geladen');
+
+        // Rufe die Positionen für den Text und Template-Variablen-Inhalt ab
+        $pos_TVText = getPositionTV($tv['tv_value'], $modx);
+        
+        // Debug: Ausgabe
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'TV-Textpositionen sind fertig.');
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Verknüpfung und Vergleich der TV-Inhalte.');
+
+        // Durchlaufe alle TXT Dateien im ersten Ordner
+        $filesA = scandir($txt_Doc_A);
+        foreach ($filesA as $file) {
+            if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
+                $filePath = $txt_Doc_A . '/' . $file;
+                
+                // Debug: Ausgabe
+                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
+                
+                // Lese der Txt-Datei lesen
+                $fileContent = file_get_contents($filePath);
+                
+                // Debug: Ausgabe
+                $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
+
+                // Vergleiche die Template-Variablen-Inhalte mit dem TXT Inhalt
+                $result = compareTexts($fileContent, $pos_TVText, $ignoreTags, $modx);
+
+                // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
+                if (!empty($result)) {
+                    $linkArray = array_merge($linkArray, $result);
+                }
+            }
+        }
+    }
+
+    // Gebe das Verknüpfungsarray zurück
+    return $linkArray;
+}
+
+
+
+/*                  Position von den Zeilen der Quellen                     */
+
 // Funktion der Auslesung der Positionen vom Ressource
 function getPositionRessource($webResources, $ignoreTags, $modx) {
     $pos_Ressource = array();
@@ -275,120 +430,7 @@ function getPositionText($fileContent, $modx) {
     return $pos_Text;
 }
 
-/* Funktionenbeispiel Anfang */
-
-// Filenamen Extrahieren für Sprache
-
-function fileNameLangExtract ($filePath, $modx){
-    
-    //Debug: Initialisierung
-    $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wird extrahiert aus den Dateinamen...");
-
-    // Suchmuster für Sprachenkürzel
-    $pattern = '/^[^-]+-(.*?)-[a-zA-Z]+\.txt/';
-
-    // Lese der Txt-Datei lesen
-    $fileContent = file_get_contents($filePath);
-
-    // Überprüfe, ob das Muster in der Datei gefunden wird
-    if (preg_match($pattern, $fileContent, $matches)) {
-        
-        $LangInit = $matches[1];
-        
-        // Debug: Anzeige des Inhalts von $LangInit
-        $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wurde extrahiert: $LangInit");
-        
-        return $LangInit;
-    }
-
-    $modx->log(xPDO::LOG_LEVEL_ERROR, "Kein Sprachenkürzel gefunden.");
-    return null;
-}
-
-// Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
-function getTVfromRessource($resource) {
-    $tvArray = array();
-
-    // Lese alle Template-Variablen der Ressource
-    $tvList = $resource->getTemplateVars();
-
-    // Durchlaufe die Template-Variablen und speichere sie in einem Array
-    foreach ($tvList as $tv) {
-        $tvArray[] = array(
-            'tv_id' => $tv->get('id'),
-            'tv_name' => $tv->get('name'),
-            'tv_value' => $tv->get('value'),
-        );
-    }
-
-    // Gebe das Array mit den Template-Variablen zurück
-    return $tvArray;
-}
-
-// Funktion zum Extrahieren des Textinhalts aus dem JSON-ähnlichen String
-function filterTextFromTV($jsonString) {
-    // Hier definieren wir ein einfaches Pattern, das "name:" oder "CaptionText:" und den Text danach erfasst
-    $pattern = '/"name":"(.*?)"|"CaptionText":"(.*?)"/';
-
-    // Hier führen wir eine preg_match_all durch, um alle Übereinstimmungen zu finden
-    preg_match_all($pattern, $jsonString, $matches);
-
-    // Hier kombinieren wir die Übereinstimmungen für "name:" und "CaptionText:"
-    $combinedMatches = array_merge($matches[1], $matches[2]);
-
-    // Hier filtern wir leere Einträge heraus
-    $filteredMatches = array_filter($combinedMatches);
-
-    // Hier geben wir den ersten Nicht-leeren Eintrag zurück oder null, wenn keiner vorhanden ist
-    return reset($filteredMatches) ?: null;
-}
-
-// Vergleich mit TV Array und Datei Text
-function compareTVTextsWithTxt($txt_Doc_A, $ignoreTags, $modx, $tvArray) {
-    $linkArray = array();
-
-    foreach ($tvArray as $tv) {
-        
-        // Debug: Ausgabe
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Positionen für TV-Text werden geladen');
-
-        // Rufe die Positionen für den Text und Template-Variablen-Inhalt ab
-        $pos_TVText = getPositionTV($tv['tv_value'], $modx);
-        
-        // Debug: Ausgabe
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'TV-Textpositionen sind fertig.');
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Verknüpfung und Vergleich der TV-Inhalte.');
-
-        // Durchlaufe alle TXT Dateien im ersten Ordner
-        $filesA = scandir($txt_Doc_A);
-        foreach ($filesA as $file) {
-            if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
-                $filePath = $txt_Doc_A . '/' . $file;
-                
-                // Debug: Ausgabe
-                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
-                
-                // Lese der Txt-Datei lesen
-                $fileContent = file_get_contents($filePath);
-                
-                // Debug: Ausgabe
-                $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
-
-                // Vergleiche die Template-Variablen-Inhalte mit dem TXT Inhalt
-                $result = compareTexts($fileContent, $pos_TVText, $ignoreTags, $modx);
-
-                // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
-                if (!empty($result)) {
-                    $linkArray = array_merge($linkArray, $result);
-                }
-            }
-        }
-    }
-
-    // Gebe das Verknüpfungsarray zurück
-    return $linkArray;
-}
-
+// Funktion der Auslesung der Positionen vom TV
 function getPositionTV() {
     $pos_TVText = array();
 
@@ -397,37 +439,25 @@ function getPositionTV() {
     return $pos_TVText;
 }
 
-
-// Funktion der Auslesung der Position von Chunks
-
-function getChunksContent() {
-
-$pos_Chunks = getPositionChunks();
-$pos_Text = getPositionText($fileContent, $modx);
-
-}
-
+// Funktion der Auslesung der Positionen vom Chunk
 function getPositonChunks() {
 $pos_Chunks= array();
 }
 
+
+/*                  Abschluss und letzte Überprüfung                    */
+
 // Erstelle Kontext anhand der Sprache, wenn Sie vorhanden ist ansonsten füge dort Ressourcen ein.
 
-function CheckContext() {
-
-
-}
+function CheckContext() {}
 
 // Erstelle Ressource des neues Kontextes anhand der gefundende ID mit den Vergleich 
 
-function CopyRessourcetoContext (){
-    
-}
+function CopyRessourcetoContext (){}
 
 // Erstelle Kategorie anhand der Sprache, wenn Sie vorhanden ist, ansonsten nicht erstellen.
 
 function CheckorCreateCatogorie(){
-
 fileNameLangExtract();
 }
 
@@ -449,32 +479,3 @@ function InsertTextToTV(){}
 // Funktion des Einfügen des Texten in den Chunks
 
 function InsertTextToChunks(){}
-
-
-/* Funktionenbeispiel Ende */
-
-function MaliciousCode($content, $modx) {
-    // Definiere Muster, nach denen im XML-Inhalt gesucht werden soll
-    $keywords_pattern = array(
-        'SQL' => '/\b(?:UPDATE|DELETE|DROP|CREATE|ALTER)\b/i',                              // SQL-Injection
-        'JavaScript/HTML' => '/<script\b[^>]*>.*<\/script>/i',                              // JavaScript/HTML-Injection
-        'PHP' => '/<\?php.*\?>/i',                                                          // PHP-Code
-        'PHP Object Injection' => '/\b(?:unserialize|__wakeup|Serializable)\b/i',           // PHP Object Injection
-        'Kommentierte PHP-Tags' => '/<!--.*<\?php.*-->.*-->/s',                             // Kommentierte PHP-Tags
-        'Dateieinbindung' => '/<\?include.*\?>/i',                                          // Dateieinbindung
-        'Systembefehle' => '/\b(?:system|exec|shell_exec|passthru)\b/i',                    // Systembefehle
-        'XSS' => '/\b(?:alert|prompt|confirm|document\.write)\b/i',                         // XSS
-        'XSS' => '/<(script|img|svg|iframe|input|a|form|embed|object|style|meta).*?>/i',    // XSS
-        'Base64' => '/base64_decode\s*\(\s*["\']?[a-zA-Z0-9+\/=]+["\']?\s*\)/i',            // Base64-kodierte Inhalte
-        'Path Traversal' => '/\.\.(?:\/|\\|%2F|%5C)/i',                                     // Strukturaufrufe
-        'Remote Code Execution' => '/\b(?:eval|assert|system|exec|shell_exec|passthru)\b/i',// Remote-Code
-        'CSRF' => '/<input.*\s+name=[\'"]?token[\'"]?.*?>/i',                               // Token
-        );
-
-    foreach ($keywords_pattern as $key => $pattern) {
-        if (preg_match($pattern, $content, $matches)) {
-            // Schädlichen Code gefunden, logge einen Fehler mit den Informationen über den gefundenen Code
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Schädlicher Code gefunden: ' . $key . '. Gefundener Code: ' . print_r($matches, true));
-        }
-    }
-}
