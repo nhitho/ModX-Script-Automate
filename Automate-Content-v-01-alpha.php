@@ -136,7 +136,7 @@ function filterTextFromTV($jsonString) {
 
 // Funktion zur Überprüfung der Dateien
 function MaliciousCode($content, $modx) {
-    // Definiere Muster, nach denen im XML-Inhalt gesucht werden soll
+    // Definiere Muster, nach denen im TXT-Inhalt gesucht werden soll
     $keywords_pattern = array(
         'SQL' => '/\b(?:UPDATE|DELETE|DROP|CREATE|ALTER)\b/i',                              // SQL-Injection
         'JavaScript/HTML' => '/<script\b[^>]*>.*<\/script>/i',                              // JavaScript/HTML-Injection
