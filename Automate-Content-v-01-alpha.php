@@ -7,7 +7,9 @@ require_once MODX_BASE_PATH . 'core/config/config.inc.php';
 $modx = new modX();
 $modx -> initialize('web');
 
-//Kontextschlüssel 'web'
+ini_set('max_execution_time', 300); // Setze die maximale Ausführungszeit auf 300 Sekunden (5 Minuten)
+ini_set('memory_limit', '512M');    // Setze das Speicherlimit auf 512 Megabyte
+
 
 // Basis-Ordner-Überwachung
 $txt_Doc_A = MODX_BASE_PATH . 'assets/txt-original';
@@ -70,7 +72,7 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
     $links = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx);
     
     // Lade Inhalte von Chunks
-    $Chunklinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx);
+    #$Chunklinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx);
 
     // Duplikation und Erstellung der Inhalte
     
@@ -137,9 +139,15 @@ function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
             // Vergleiche die Ressourcen Inhalte mit dem TXT Inhalt
             $result = compareTexts($fileContent, $webResources, $ignoreTags, $modx);
 
+            $resultTV = compareTVTextsWithTxt($fileContent, $webResources, $ignoreTags, $modx);
+
             // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
             if (!empty($result)) {
                 $linkArray = array_merge($linkArray, $result);
+            }
+            // Wenn Übereinstimmung gefunden wurde, füge es zum Template-Variable Verknüpfungsarray hinzu
+            if (!empty($resultTV)) {
+                $linkArray = array_merge($linkArray, $resultTV);
             }
         }
     }
@@ -171,7 +179,7 @@ function getWebContextResources($modx) {
             'content' => $resource->get('content'),
             'title' => $resource->get('pagetitle'),
             'alias' => $resource->get('alias'),
-            'template_vars' => $tvArray,
+            'tv_variable' => $tvArray,
         );
     }
      
@@ -185,25 +193,29 @@ function getWebContextResources($modx) {
 function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
     $linkArray = array();
     
-    
     // Rufe die Positionen für die Ressource auf.
     $pos_Ressource = getPositionRessource($webResources, $ignoreTags, $modx);
     
+    // Rufe die Position für die Ressource auf.
+    #$pos_TVText = getPositionTV();
     
     // Rufe die Positionen für die Datei auf.
     $pos_Text = getPositionText($fileContent, $modx);
-    
 
     foreach ($pos_Ressource as $positionRessource) {
-        
+        // Ignoriere Tags der Ressourcen Content
+        $cleanedResourceContent = strip_tags($positionRessource['html_content'], implode('', $ignoreTags));
+
         // Durchlaufe die ermittelten Positionen für den Text
         foreach ($pos_Text as $positionText) {
-            
             // Vergleiche die Textinhalte genau mit strcmp
-            $comparison = strcmp($positionRessource['html_content'], $positionText['file_content']);
+            $comparison = strcmp($cleanedResourceContent, $positionText['file_content']);
 
-            // Wenn die Texte genau übereinstimmen, füge es zum Verknüpfungsarray hinzu
-            if ($comparison === 0) {
+            // Suche nach dem Text aus der Ressource in der Textdatei
+            $pos = strpos($positionText['file_content'], $cleanedResourceContent);
+
+            // Wenn der Text aus der Ressource in der Zeile gefunden wurde
+            if ($pos !== false) {
                 $linkArray[] = array(
                     'resource_id' => $positionRessource['id'],
                     'position_in_resource' => $positionRessource['html_line'],
@@ -212,7 +224,7 @@ function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
                 );
 
                 // Debug: Ausgabe
-                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Exakter Textvergleich gefunden.');
+                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Text gefunden.');
 
                 // Breche die innere Schleife ab, da ein Match gefunden wurde
                 break;
@@ -233,9 +245,6 @@ function getPositionRessource($webResources, $ignoreTags, $modx) {
         // Suche nach Positionen im HTML-Text
         $linesResource = explode("\n", $cleanedResourceContent);
         foreach ($linesResource as $i => $line) {
-
-            // Debug: Ausgabe
-            # $modx->log(xPDO::LOG_LEVEL_ERROR, 'HTML Line ' . ($i + 1) . ': ' . $line);
             
             $pos_Ressource[] = [
                 'id' => $resource['id'],
@@ -292,58 +301,63 @@ function getTVfromRessource($resource) {
     return $tvArray;
 }
 
-// Vergleich mit TV Array und Datei Text
-function compareTVTextsWithTxt($txt_Doc_A, $ignoreTags, $modx, $tvArray) {
-    $linkArray = array();
+// Vergleich von Template-Variablen mit Text
+function compareTVTextsWithTxt($filecontent, $webResources,$ignoreTags, $modx) {
+    $linkTVArray = array();
 
-    foreach ($tvArray as $tv) {
-        
-        // Debug: Ausgabe
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Positionen für TV-Text werden geladen');
+            // Rufe die Positionen für die TV-Variable auf.
+            $pos_TVText = getPositionTV($webResources, $modx);
 
-        // Rufe die Positionen für den Text und Template-Variablen-Inhalt ab
-        $pos_TVText = getPositionTV($tv['tv_value'], $modx);
-        
-        // Debug: Ausgabe
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'TV-Textpositionen sind fertig.');
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Verknüpfung und Vergleich der TV-Inhalte.');
+            // Rufe die Positionen für die Datei auf.
+            $pos_Text = getPositionText($fileContent, $modx);
 
-        // Durchlaufe alle TXT Dateien im ersten Ordner
-        $filesA = scandir($txt_Doc_A);
-        foreach ($filesA as $file) {
-            if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
-                $filePath = $txt_Doc_A . '/' . $file;
-                
-                // Debug: Ausgabe
-                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
-                
-                // Lese der Txt-Datei lesen
-                $fileContent = file_get_contents($filePath);
-                
-                // Debug: Ausgabe
-                $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
+            foreach ($pos_TVText as $positionTVText) {
+                // Durchlaufe die ermittelten Positionen für die TV-Variable
+                foreach ($tvArray as $tv) {
+                    $tvID = $tv['tv_id'];
+                    $tvName = $tv['tv_name'];
+                    $tvValue = $tv['tv_value'];
 
-                // Vergleiche die Template-Variablen-Inhalte mit dem TXT Inhalt
-                $result = compareTexts($fileContent, $pos_TVText, $ignoreTags, $modx);
+                    // Vergleiche die Template-Variablen Inhalte mit dem TV-Variable Inhalt aus der TXT Datei
+                    $comparison = strcmp($positionTVText['tv_content'], $tvValue);
 
-                // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
-                if (!empty($result)) {
-                    $linkArray = array_merge($linkArray, $result);
+                    // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
+                    if ($comparison === 0) {
+                        // Füge alle relevanten Informationen zum Verknüpfungsarray hinzu
+                        $linkTVArray[] = array(
+                            'tv_id' => $tvID,
+                            'tv_name' => $tvName,
+                            'tv_value' => $tvValue,
+                            'file_line' => $positionTVText['tv_line'],
+                            'file_content' => $positionTVText['tv_content'],
+                        );
+
+                        // Debug: Ausgabe
+                        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Template-Variablen Text gefunden.');
+
+                        // Breche die innere Schleife ab, da ein Match gefunden wurde
+                        break;
+                    }
                 }
             }
-        }
-    }
-
     // Gebe das Verknüpfungsarray zurück
-    return $linkArray;
+    return $linkTVArray;
 }
 
-// Funktion der Auslesung der Positionen vom TV
-function getPositionTV() {
+// Funktion der Auslesung der Positionen vom Template-Variable des Ressouruces
+function getPositionTV($tvValue, $modx) {
     $pos_TVText = array();
 
+    // Suche nach Positionen im Template-Variable-Text
+    $linesTV = explode("\n", $tvValue);
+    foreach ($linesTV as $i => $line) {
+        $pos_TVText[] = [
+            'tv_line' => $i + 1, // Startet mit 1
+            'tv_content' => $line,
+        ];
+    }
 
-
+    // Hier hast du nun alle Positionen mit den Zeilennummern und den Inhalten der Zeilen
     return $pos_TVText;
 }
 
@@ -418,6 +432,9 @@ function fileNameLangExtract ($filePath, $modx){
 }
 
 /*                  Duplizierung und Erstellung der neuen Inhalten                         */
+
+
+
 
 // Erstelle Kontext anhand der Sprache, wenn Sie vorhanden ist ansonsten füge dort Ressourcen ein.
 
