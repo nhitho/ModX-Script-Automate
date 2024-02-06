@@ -65,16 +65,15 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
             $modx->log(xPDO::LOG_LEVEL_ERROR, 'Überprüfung der Datei '. $file.' ist abgeschlossen');
         }
     }
-    // Debug: Ausgabe
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'TXT-Dateien geladen: ' . print_r($filesA, true) . ' | ' . print_r($filesB, true)); 
     
-    // Debug: Ausgabe
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Funktion Textvergleich wird initialisiert...');  
-    
+    // Lade Inhalte von Content-Ressourcen und TV-Variablen
     $links = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx);
     
-    // Debug: Ausgabe
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet');
+    // Lade Inhalte von Chunks
+    $Chunklinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx);
+
+    // Duplikation und Erstellung der Inhalte
+    
 
     // Debug: Ausgabe
     $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($links, true));
@@ -87,52 +86,8 @@ else {
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler: Die TXT-Ordner (A oder B) existieren nicht.');
 }
 
-/*                 Voreinstellungen Filter Funktionen                   */
+/*                 Schadwareüberprüfung                                               */
 
-// Filenamen Extrahieren für Sprache
-function fileNameLangExtract ($filePath, $modx){
-    
-    //Debug: Initialisierung
-    $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wird extrahiert aus den Dateinamen...");
-
-    // Suchmuster für Sprachenkürzel
-    $pattern = '/^[^-]+-(.*?)-[a-zA-Z]+\.txt/';
-
-    // Lese der Txt-Datei lesen
-    $fileContent = file_get_contents($filePath);
-
-    // Überprüfe, ob das Muster in der Datei gefunden wird
-    if (preg_match($pattern, $fileContent, $matches)) {
-        
-        $LangInit = $matches[1];
-        
-        // Debug: Anzeige des Inhalts von $LangInit
-        $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wurde extrahiert: $LangInit");
-        
-        return $LangInit;
-    }
-
-    $modx->log(xPDO::LOG_LEVEL_ERROR, "Kein Sprachenkürzel gefunden.");
-    return null;
-}
-
-// Funktion zum Extrahieren des Textinhalts aus dem JSON-ähnlichen String
-function filterTextFromTV($jsonString) {
-    // Hier definieren wir ein einfaches Pattern, das "name:" oder "CaptionText:" und den Text danach erfasst
-    $pattern = '/"name":"(.*?)"|"CaptionText":"(.*?)"/';
-
-    // Hier führen wir eine preg_match_all durch, um alle Übereinstimmungen zu finden
-    preg_match_all($pattern, $jsonString, $matches);
-
-    // Hier kombinieren wir die Übereinstimmungen für "name:" und "CaptionText:"
-    $combinedMatches = array_merge($matches[1], $matches[2]);
-
-    // Hier filtern wir leere Einträge heraus
-    $filteredMatches = array_filter($combinedMatches);
-
-    // Hier geben wir den ersten Nicht-leeren Eintrag zurück oder null, wenn keiner vorhanden ist
-    return reset($filteredMatches) ?: null;
-}
 
 // Funktion zur Überprüfung der Dateien
 function MaliciousCode($content, $modx) {
@@ -161,112 +116,23 @@ function MaliciousCode($content, $modx) {
     }
 }
 
-/*                 Funktionen für Einscannen der Quellen                */
-
-// Funktion zum Aufruf des Modx Kontext key 'web'
-function getWebContextResources($modx) {
-    
-    // Debug: Ausgabe
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Rufe Kontext "web" auf.'); // DEBUG
-    
-    // Rufe ModX Kontext auf
-    $webContext = $modx->getContext('web');
-
-    // Debug: Ausgabe
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Web-Kontext geladen: ' . print_r($webContext, true));
-
-    // Debug: Ausgabe
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Lade die Ressourcen');
-
-    // Rufe TV Variablen vom Resourcen dazu
-    
-
-    // Rufe die darin enthaltenen Ressourcen auf
-    if (!$resources = $modx->getCollection('modResource', array('context_key' => 'web'))){
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Laden der Ressourcen: ' . $webContext->error); 
-    }
-    
-    // Debug: Ausgabe
-    #$modx->log(xPDO::LOG_LEVEL_ERROR, 'Speichert die Inhalte.');
-
-    // Speichere ID, Content, Titel, Alias und Template-Variablen in einen Array ab
-    $resultArray = array();
-    foreach ($resources as $resource) {
-        $tvArray = getTVfromRessource($resource);
-
-         // Füge Informationen zur Ressource inkl. Template-Variablen dem Ergebnisarray hinzu
-        $resultArray[] = array(
-            'id' => $resource->get('id'),
-            'content' => $resource->get('content'),
-            'title' => $resource->get('pagetitle'),
-            'alias' => $resource->get('alias'),
-            'template_vars' => $tvArray,
-        );
-    }
-    
-    // Debug: Ausgabe 
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ergebnisse werden gepostet'); 
-    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($resultArray, true));
-
-    // Gebe den Array zurück
-    return $resultArray;
-}
-
-// Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
-function getTVfromRessource($resource) {
-    $tvArray = array();
-
-    // Lese alle Template-Variablen der Ressource
-    $tvList = $resource->getTemplateVars();
-
-    // Durchlaufe die Template-Variablen und speichere sie in einem Array
-    foreach ($tvList as $tv) {
-        $tvArray[] = array(
-            'tv_id' => $tv->get('id'),
-            'tv_name' => $tv->get('name'),
-            'tv_value' => $tv->get('value'),
-        );
-    }
-
-    // Gebe das Array mit den Template-Variablen zurück
-    return $tvArray;
-}
-
-// Funktion der Auslesung der Position von Chunks
-function getChunksContent() {
-    $pos_Chunks = getPositionChunks();
-    $pos_Text = getPositionText($fileContent, $modx);
-}
-
-/*                  Vergleich der Quellen                                */
+/*                           Ressource                                                */
 
 // Funktion zum Vergleich der Ressource Content und TXT Inhalt
 function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
     $linkArray = array();
 
-    // Debug: Ausgabe 
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Initialisiere Webkontext und Ressourcen...');
-
     // Rufe die Funktion zum Aufruf des ModX Kontext key 'web'
     $webResources = getWebContextResources($modx);
     
-    // Debug: Ausgabe 
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Webkontext und Ressourcen wurden geladen...'); 
-
     // Durchlaufe alle TXT Dateien im ersten Ordner
     $filesA = scandir($txt_Doc_A);
     foreach ($filesA as $file) {
         if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
             $filePath = $txt_Doc_A . '/' . $file;
-            
-            // Debug: Ausgabe 
-            # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
-            
+             
             // Lese der Txt-Datei lesen
             $fileContent = file_get_contents($filePath);
-
-            // Debug: Ausgabe 
-            # $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
 
             // Vergleiche die Ressourcen Inhalte mit dem TXT Inhalt
             $result = compareTexts($fileContent, $webResources, $ignoreTags, $modx);
@@ -282,27 +148,51 @@ function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
     return $linkArray;
 }
 
+// Funktion zum Aufruf des Modx Kontext key 'web'
+function getWebContextResources($modx) {
+    
+    // Rufe ModX Kontext auf
+    $webContext = $modx->getContext('web');
+
+    // Rufe die darin enthaltenen Ressourcen auf
+    if (!$resources = $modx->getCollection('modResource', array('context_key' => 'web'))){
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Laden der Ressourcen: ' . $webContext->error); 
+    }
+
+
+    // Speichere ID, Content, Titel, Alias und Template-Variablen in einen Array ab
+    $resultArray = array();
+    foreach ($resources as $resource) {
+        $tvArray = getTVfromRessource($resource);
+
+         // Füge Informationen zur Ressource inkl. Template-Variablen dem Ergebnisarray hinzu
+        $resultArray[] = array(
+            'id' => $resource->get('id'),
+            'content' => $resource->get('content'),
+            'title' => $resource->get('pagetitle'),
+            'alias' => $resource->get('alias'),
+            'template_vars' => $tvArray,
+        );
+    }
+     
+    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($resultArray, true));
+
+    // Gebe den Array zurück
+    return $resultArray;
+}
+
 // Funktion zum Vergleich von Texten
 function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
     $linkArray = array();
     
-    // Debug: Ausgabe
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ressourcenpositionen werden geladen');
     
     // Rufe die Positionen für die Ressource auf.
     $pos_Ressource = getPositionRessource($webResources, $ignoreTags, $modx);
     
-    // Debug: Ausgabe
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Textpositionen werden geladen');
     
     // Rufe die Positionen für die Datei auf.
     $pos_Text = getPositionText($fileContent, $modx);
     
-    // Debug: Ausgabe
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ressource- und Textpositionen sind fertig.');
-    
-    // Debug: Ausgabe
-    # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Verknüpfung und Vergleich der Inhalte.');
 
     foreach ($pos_Ressource as $positionRessource) {
         
@@ -331,56 +221,6 @@ function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
     }
     return $linkArray;
 }
-
-// Vergleich mit TV Array und Datei Text
-function compareTVTextsWithTxt($txt_Doc_A, $ignoreTags, $modx, $tvArray) {
-    $linkArray = array();
-
-    foreach ($tvArray as $tv) {
-        
-        // Debug: Ausgabe
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Positionen für TV-Text werden geladen');
-
-        // Rufe die Positionen für den Text und Template-Variablen-Inhalt ab
-        $pos_TVText = getPositionTV($tv['tv_value'], $modx);
-        
-        // Debug: Ausgabe
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'TV-Textpositionen sind fertig.');
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Verknüpfung und Vergleich der TV-Inhalte.');
-
-        // Durchlaufe alle TXT Dateien im ersten Ordner
-        $filesA = scandir($txt_Doc_A);
-        foreach ($filesA as $file) {
-            if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
-                $filePath = $txt_Doc_A . '/' . $file;
-                
-                // Debug: Ausgabe
-                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
-                
-                // Lese der Txt-Datei lesen
-                $fileContent = file_get_contents($filePath);
-                
-                // Debug: Ausgabe
-                $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
-
-                // Vergleiche die Template-Variablen-Inhalte mit dem TXT Inhalt
-                $result = compareTexts($fileContent, $pos_TVText, $ignoreTags, $modx);
-
-                // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
-                if (!empty($result)) {
-                    $linkArray = array_merge($linkArray, $result);
-                }
-            }
-        }
-    }
-
-    // Gebe das Verknüpfungsarray zurück
-    return $linkArray;
-}
-
-
-
-/*                  Position von den Zeilen der Quellen                     */
 
 // Funktion der Auslesung der Positionen vom Ressource
 function getPositionRessource($webResources, $ignoreTags, $modx) {
@@ -430,6 +270,74 @@ function getPositionText($fileContent, $modx) {
     return $pos_Text;
 }
 
+/*                           Template Variable                                            */
+
+// Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
+function getTVfromRessource($resource) {
+    $tvArray = array();
+
+    // Lese alle Template-Variablen der Ressource
+    $tvList = $resource->getTemplateVars();
+
+    // Durchlaufe die Template-Variablen und speichere sie in einem Array
+    foreach ($tvList as $tv) {
+        $tvArray[] = array(
+            'tv_id' => $tv->get('id'),
+            'tv_name' => $tv->get('name'),
+            'tv_value' => $tv->get('value'),
+        );
+    }
+
+    // Gebe das Array mit den Template-Variablen zurück
+    return $tvArray;
+}
+
+// Vergleich mit TV Array und Datei Text
+function compareTVTextsWithTxt($txt_Doc_A, $ignoreTags, $modx, $tvArray) {
+    $linkArray = array();
+
+    foreach ($tvArray as $tv) {
+        
+        // Debug: Ausgabe
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Positionen für TV-Text werden geladen');
+
+        // Rufe die Positionen für den Text und Template-Variablen-Inhalt ab
+        $pos_TVText = getPositionTV($tv['tv_value'], $modx);
+        
+        // Debug: Ausgabe
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'TV-Textpositionen sind fertig.');
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Verknüpfung und Vergleich der TV-Inhalte.');
+
+        // Durchlaufe alle TXT Dateien im ersten Ordner
+        $filesA = scandir($txt_Doc_A);
+        foreach ($filesA as $file) {
+            if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
+                $filePath = $txt_Doc_A . '/' . $file;
+                
+                // Debug: Ausgabe
+                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Hole Inhalt aus den Textdokumenten.');
+                
+                // Lese der Txt-Datei lesen
+                $fileContent = file_get_contents($filePath);
+                
+                // Debug: Ausgabe
+                $modx->log(xPDO::LOG_LEVEL_ERROR, ' Inhalte wurden geladen.');
+
+                // Vergleiche die Template-Variablen-Inhalte mit dem TXT Inhalt
+                $result = compareTexts($fileContent, $pos_TVText, $ignoreTags, $modx);
+
+                // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
+                if (!empty($result)) {
+                    $linkArray = array_merge($linkArray, $result);
+                }
+            }
+        }
+    }
+
+    // Gebe das Verknüpfungsarray zurück
+    return $linkArray;
+}
+
 // Funktion der Auslesung der Positionen vom TV
 function getPositionTV() {
     $pos_TVText = array();
@@ -439,13 +347,77 @@ function getPositionTV() {
     return $pos_TVText;
 }
 
+// Funktion zum Extrahieren des Textinhalts aus dem JSON-ähnlichen String
+function filterTextFromTV($jsonString) {
+    // Hier definieren wir ein einfaches Pattern, das "name:" oder "CaptionText:" und den Text danach erfasst
+    $pattern = '/"name":"(.*?)"|"CaptionText":"(.*?)"/';
+
+    // Hier führen wir eine preg_match_all durch, um alle Übereinstimmungen zu finden
+    preg_match_all($pattern, $jsonString, $matches);
+
+    // Hier kombinieren wir die Übereinstimmungen für "name:" und "CaptionText:"
+    $combinedMatches = array_merge($matches[1], $matches[2]);
+
+    // Hier filtern wir leere Einträge heraus
+    $filteredMatches = array_filter($combinedMatches);
+
+    // Hier geben wir den ersten Nicht-leeren Eintrag zurück oder null, wenn keiner vorhanden ist
+    return reset($filteredMatches) ?: null;
+}
+
+/*                           Chunks                                                        */
+
+// Funktion der Auslesung der Position von Chunks
+function getAllChunksContent($modx) {
+    $chunks = $modx->getCollection('modChunk');
+    $chunkArray = array();
+
+    foreach ($chunks as $chunk) {
+        $chunkArray[] = array(
+            'id' => $chunk->get('id'),
+            'content' => $chunk->get('content'),
+        );
+    }
+
+    return $chunkArray;
+}
+
 // Funktion der Auslesung der Positionen vom Chunk
 function getPositonChunks() {
-$pos_Chunks= array();
+    $pos_Chunks= array();
 }
 
 
-/*                  Abschluss und letzte Überprüfung                    */
+/*                  Dateinamen und Dateiinhalt extrahieren                                 */
+
+// Filenamen Extrahieren für Sprache
+function fileNameLangExtract ($filePath, $modx){
+    
+    //Debug: Initialisierung
+    $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wird extrahiert aus den Dateinamen...");
+
+    // Suchmuster für Sprachenkürzel
+    $pattern = '/^[^-]+-(.*?)-[a-zA-Z]+\.txt/';
+
+    // Lese der Txt-Datei lesen
+    $fileContent = file_get_contents($filePath);
+
+    // Überprüfe, ob das Muster in der Datei gefunden wird
+    if (preg_match($pattern, $fileContent, $matches)) {
+        
+        $LangInit = $matches[1];
+        
+        // Debug: Anzeige des Inhalts von $LangInit
+        $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wurde extrahiert: $LangInit");
+        
+        return $LangInit;
+    }
+
+    $modx->log(xPDO::LOG_LEVEL_ERROR, "Kein Sprachenkürzel gefunden.");
+    return null;
+}
+
+/*                  Duplizierung und Erstellung der neuen Inhalten                         */
 
 // Erstelle Kontext anhand der Sprache, wenn Sie vorhanden ist ansonsten füge dort Ressourcen ein.
 
