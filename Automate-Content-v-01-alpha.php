@@ -69,16 +69,17 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
     }
     
     // Lade Inhalte von Content-Ressourcen und TV-Variablen
-    $links = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx);
+    $Ressourcelinks = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx);
     
     // Lade Inhalte von Chunks
-    #$Chunklinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx);
+    $Chunklinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx);
 
     // Duplikation und Erstellung der Inhalte
-    
+    #allgetTogether($txt_Doc_B, $Ressourcelinks, $Chunklinks, $modx);    
 
-    // Debug: Ausgabe
-    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($links, true));
+    // Endkommentar
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Alle Prozesse sind abgeschlossen.');
+
 } 
 else {
     // Debug: Ausgabe
@@ -122,7 +123,7 @@ function MaliciousCode($content, $modx) {
 
 // Funktion zum Vergleich der Ressource Content und TXT Inhalt
 function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
-    $linkArray = array();
+    $Ressourcelinks = array();
 
     // Rufe die Funktion zum Aufruf des ModX Kontext key 'web'
     $webResources = getWebContextResources($modx);
@@ -137,23 +138,13 @@ function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
             $fileContent = file_get_contents($filePath);
 
             // Vergleiche die Ressourcen Inhalte mit dem TXT Inhalt
-            $result = compareTexts($fileContent, $webResources, $ignoreTags, $modx);
+            $Ressourcelinks = compareTexts($fileContent, $webResources, $ignoreTags, $modx);
 
-            $resultTV = compareTVTextsWithTxt($fileContent, $webResources, $ignoreTags, $modx);
-
-            // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
-            if (!empty($result)) {
-                $linkArray = array_merge($linkArray, $result);
-            }
-            // Wenn Übereinstimmung gefunden wurde, füge es zum Template-Variable Verknüpfungsarray hinzu
-            if (!empty($resultTV)) {
-                $linkArray = array_merge($linkArray, $resultTV);
-            }
         }
     }
 
     // Gebe das Verknüpfungsarray zurück
-    return $linkArray;
+    return $Ressourcelinks;
 }
 
 // Funktion zum Aufruf des Modx Kontext key 'web'
@@ -197,7 +188,7 @@ function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
     $pos_Ressource = getPositionRessource($webResources, $ignoreTags, $modx);
     
     // Rufe die Position für die Ressource auf.
-    #$pos_TVText = getPositionTV();
+    $pos_TVText = getPositionTV($webResources, $modx);
     
     // Rufe die Positionen für die Datei auf.
     $pos_Text = getPositionText($fileContent, $modx);
@@ -214,24 +205,39 @@ function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
             // Suche nach dem Text aus der Ressource in der Textdatei
             $pos = strpos($positionText['file_content'], $cleanedResourceContent);
 
-            // Wenn der Text aus der Ressource in der Zeile gefunden wurde
-            if ($pos !== false) {
-                $linkArray[] = array(
-                    'resource_id' => $positionRessource['id'],
-                    'position_in_resource' => $positionRessource['html_line'],
-                    'file_line' => $positionText['file_line'],
-                    'text_content' => $positionText['file_content']
-                );
+            foreach ($pos_TVText as $positionTVText) {
+                // Ignoriere Markdown der TV content
+                $cleanedTVContent = filterTextFromTV($positionTVText['tv_value']);
 
-                // Debug: Ausgabe
-                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Text gefunden.');
+                // Vergleiche die Textinhalte genau mit strcmp
+                $comparisonT = strcmp($cleanedTVContent, $positionText['file_content']);
 
-                // Breche die innere Schleife ab, da ein Match gefunden wurde
-                break;
+                $posT = strpos($positionText['file_content'], $cleanedTVContent);
+
+                // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
+                if ($comparison === 0 && $pos !== false && $posC !== false) {
+                    // Füge alle relevanten Informationen zum Verknüpfungsarray hinzu
+                    $linkArray[] = array(
+                        'id' => $positionRessource['id'],
+                        'html_line' => $positionRessource['html_line'],
+                        'html_content' => $positionRessource['html_content'],
+                        'tv_id' => $positionTVText['tv_id'],
+                        'tv_line' => $positionTVText['tv_line'],
+                        'tv_value' => $positionTVText['tv_value'],
+                        'file_line' => $positionText['file_line'],
+                        'file_content' => $positionText['file_content'],
+                    );
+
+                    // Debug: Ausgabe
+                    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Text gefunden.');
+
+                    // Breche die innere Schleife ab, da ein Match gefunden wurde
+                    break;
+                }
             }
         }
     }
-    return $linkArray;
+        return $linkArray;
 }
 
 // Funktion der Auslesung der Positionen vom Ressource
@@ -265,9 +271,6 @@ function getPositionText($fileContent, $modx) {
     // Suche nach Positionen in der Textdatei
     $linesFile = explode("\n", $fileContent);
     foreach ($linesFile as $i => $line) {
-
-        // Debug: Ausgabe
-        # $modx->log(xPDO::LOG_LEVEL_ERROR, 'File Line ' . ($i + 1) . ': ' . $line);
         
         $pos_Text[] = [
             'file_line' => $i + 1, // Startet mit 1
@@ -381,6 +384,69 @@ function filterTextFromTV($jsonString) {
 
 /*                           Chunks                                                        */
 
+function compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx){
+
+    // Durchlaufe alle TXT Dateien im ersten Ordner
+    $filesA=scandir($txt_Doc_A);
+    foreach ($filesA as $file) {
+        if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
+            $filePath = $txt_Doc_A . '/' . $file;
+             
+            // Lese der Txt-Datei lesen
+            $fileContent = file_get_contents($filePath);
+
+            // Lade Inhalte von Chunks
+            $Chunklinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx);
+        }
+
+    // Debug: Ausgabe
+    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($Chunklinks, true));
+
+    // Gebe das Verknüpfungsarray zurück
+    return $Chunklinks;
+}
+
+// Vergleich mit Chunks und Text
+function ChunksTextsWithTxt($filecontent, $webResources,$ignoreTags, $modx) {
+    $linkChunksArray = array();
+
+            // Rufe die Positionen für die Chunks auf.
+            $pos_Chunks = getPositionChunks($webResources, $modx);
+
+            // Rufe die Positionen für die Datei auf.
+            $pos_Text = getPositionText($fileContent, $modx);
+
+            foreach ($pos_Chunks as $positionChunks) {
+                // Durchlaufe die ermittelten Positionen für die Chunks
+                foreach ($chunkArray as $chunk) {
+                    $chunkID = $chunk['chunk_id'];
+                    $chunkContent = $chunk['chunk_content'];
+
+                    // Vergleiche die Chunks Inhalte mit dem Chunk Inhalt aus der TXT Datei
+                    $comparison = strcmp($positionChunks['chunk_content'], $chunkContent);
+
+                    // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
+                    if ($comparison === 0) {
+                        // Füge alle relevanten Informationen zum Verknüpfungsarray hinzu
+                        $linkChunksArray[] = array(
+                            'chunk_id' => $chunkID,
+                            'chunk_content' => $chunkContent,
+                            'file_line' => $positionChunks['chunk_line'],
+                            'file_content' => $positionChunks['chunk_content'],
+                        );
+
+                        // Debug: Ausgabe
+                        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Chunks Text gefunden.');
+
+                        // Breche die innere Schleife ab, da ein Match gefunden wurde
+                        break;
+                    }
+                }
+            }
+    // Gebe das Verknüpfungsarray zurück
+    return $linkChunksArray;
+}
+
 // Funktion der Auslesung der Position von Chunks
 function getAllChunksContent($modx) {
     $chunks = $modx->getCollection('modChunk');
@@ -431,40 +497,178 @@ function fileNameLangExtract ($filePath, $modx){
     return null;
 }
 
+// Filenamen Extrahieren für Sprache
+function fileNameLangExtract($txt_Doc_B, $modx) {
+    
+    // Durchlaufe alle TXT Dateien im zweiten Ordner
+    $filePath = scandir($txt_Doc_B);
+    foreach ($filesB as $file) {
+        if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
+            $filePath = $txt_Doc_B . '/' . $file;
+
+            // Debug: Initialisierung
+            $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wird extrahiert aus den Dateinamen...");
+
+            // Suchmuster für Sprachenkürzel
+            $pattern = '/^[^-]+-(.*?)-[a-zA-Z]+\.txt/';
+
+            // Extrahiere den Dateinamen aus dem Dateipfad
+            $fileName = basename($filePath);
+
+            // Überprüfe, ob das Muster im Dateinamen gefunden wird
+            if (preg_match($pattern, $fileName, $matches)) {
+                
+                $langCode = $matches[1];
+                
+                // Debug: Anzeige des extrahierten Sprachenkürzels
+                $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wurde extrahiert: $langCode");
+                
+                return $langCode;
+            }
+
+            $modx->log(xPDO::LOG_LEVEL_ERROR, "Kein Sprachenkürzel gefunden.");
+            return $LangInit;
+        }
+    }
+}
+            
+
 /*                  Duplizierung und Erstellung der neuen Inhalten                         */
 
+// Hauptkategorie für die Duplizierung und Erstellung der neuen Inhalte
+function allgetTogether ($txt_Doc_B,$Contentlinks, $Chunklinks, $modx){
+
+    // Durchlaufe alle TXT Dateien im zweiten Ordner
+    $filesB = scandir($txt_Doc_B);
+    foreach ($filesB as $file) {
+        if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
+            $filePath = $txt_Doc_B . '/' . $file;
+
+            // Lese der Txt-Datei lesen
+            $fileContent = file_get_contents($filePath);
+
+            // Extrahiere den Sprachcode aus dem Dateinamen
+            $langCode = fileNameLangExtract($filePath, $modx);
+
+            // Überprüfe ob Kontext bereits existiert, wenn nicht erstelle Sie
+            if (!$langContext = $modx->getContext($langCode)) {
+                $langContext = createLangContext($langCode, $modx);
+            }
+            // Überprüfe ob Kategorie bereits existiert, wenn nicht erstelle Sie
+            if (!$langCategory = $modx->getObject('modCategory', array('name' => $langCode))) {
+                $langCategory = createLangCategory($langCode, $modx);
+            }
+
+            // Dupliziere die von 'Web' Ressourcen in den neuen Kontext
+            duplicateResources($Ressourcelinks,$langContext, $modx);
+            
+            // Dupliziere die Chunks von der Kategorie DE in die neue Kategorie
+            duplicateChunks($Chunklinks,$langCategory, $modx);
+
+            // Füge die Inhalte, im neuen Kontext, in den Ressourcen ein, abhängig von der Sprache
+            insertRessource($Ressourcelinks, $fileContent, $langContext, $modx);
+
+            // Füge die Inhalte, in der neuen Kategorie, in den Chunks ein, abhängig von der Sprache
+            insertChunks($Chunklinks, $fileContent, $langCategory, $modx);
 
 
-
-// Erstelle Kontext anhand der Sprache, wenn Sie vorhanden ist ansonsten füge dort Ressourcen ein.
-
-function CheckContext() {}
-
-// Erstelle Ressource des neues Kontextes anhand der gefundende ID mit den Vergleich 
-
-function CopyRessourcetoContext (){}
-
-// Erstelle Kategorie anhand der Sprache, wenn Sie vorhanden ist, ansonsten nicht erstellen.
-
-function CheckorCreateCatogorie(){
-fileNameLangExtract();
+            // Ausgabe
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Kontext, Kategorie, Chunks, Ressouren wurden erfolgreich dupliziert, erstellt und eingefügt.');
+        }
+    }
 }
 
-// Erstelle neue Chunks anhand der Sprache und verknüpfe Sie mit der Kategorie, wenn Sie vorhanden ist, ansonsten nicht erstellen.
+// Funktion zum Erstellen eines Kontextes
+function createLangContext($langCode, $modx) {
+    // Erstelle den Kontext
+    $langContext = $modx->newObject('modContext');
+    $langContext->fromArray(array(
+        'key' => $langCode,
+        'name' => $langCode,
+        'rank' => 0,
+        'menuindex' => 0,
+        'default' => 0,
+        'config' => '',
+        'base_url' => '/'$langCode.'/',
+    ));
 
-function DuplicateOrUpdateChunks () {
-    CheckorCreateCatogorie();
-    getChunksContent();
+    // Speichere den Kontext
+    if ($langContext->save() === false) {
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Erstellen des Kontextes: ' . print_r($langContext->error, true));
+    }
+
+    // Gebe den Kontext zurück
+    return $langContext;
 }
 
-// Funktion der Einfügen des Textes zu der Ressource
+//Funktion zum Erstellen einer Kategorie
+function createLangCategory($langCode, $modx);{
+    // Erstelle die Kategorie
+    $langCategory = $modx->newObject('modCategory');
+    $langCategory->fromArray(array(
+        'name' => $langCode,
+        'parent' => 0,
+        'rank' => 0,
+    ));
 
-function InsertTextToRessource (){}
+    // Speichere die Kategorie
+    if ($langCategory->save() === false) {
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Erstellen der Kategorie: ' . print_r($langCategory->error, true));
+    }
 
-// Funktion des Einfügens des Textes in den Template-Variable des Ressoruces 
+    // Gebe die Kategorie zurück
+    return $langCategory;
+}
 
-function InsertTextToTV(){}
+// Funktion zum Duplizieren von Ressourcen in neuen Kontext
+function duplicateResources($Ressourcelinks, $langContext, $modx) {
+    foreach ($Ressourcelinks as $links){
+        // Dupliziere die Ressourcen, abhänging von der ID aus den $Ressourcelinks, in die neue Kontext ein
+        $resource = $modx->getObject('modResource', $links['id']);
+        $newResource = $resource->duplicate($langContext);
+        $newResource->save();
+    }
+}
 
-// Funktion des Einfügen des Texten in den Chunks
+// Funktion zum Einfügen von Inhalten in Ressourcen
+function insertRessource($Ressourcelinks, $fileContent, $langContext, $modx) {
+    foreach ($Ressourcelinks as $links){
+        // Füge anhand der html_line und file_line die Inhalte in die Ressourcen ein
+        $resource = $modx->getObject('modResource', $links['id']);
+        $htmlContent = $resource->getContent();
+        $newHtmlContent = insertContent($htmlContent, $fileContent, $links['html_line'], $links['file_line']);
+        $resource->setContent($newHtmlContent);
+        $resource->save();
+    }
+}
 
-function InsertTextToChunks(){}
+// Funktion zum Duplizieren von Chunks in neue Kategorie
+function duplicateChunks($Chunklinks, $langCategory, $modx) {
+    foreach ($Chunklinks as $links){
+        // Dupliziere die Chunks, abhänging von der ID aus den $Chunklinks, in die neue Kategorie ein
+        $chunk = $modx->getObject('modChunk', $links['id']);
+        $newChunk = $chunk->duplicate($langCategory);
+        $newChunk->save();
+    }
+}
+
+function InsertChunks($Chunklinks, $fileContent, $langCategory, $modx) {
+    foreach ($Chunklinks as $links){
+        // Füge anhand der tv_line und file_line die Inhalte in die Chunks ein
+        $chunk = $modx->getObject('modChunk', $links['id']);
+        $htmlContent = $chunk->getContent();
+        $newHtmlContent = insertContent($htmlContent, $fileContent, $links['html_line'], $links['file_line']);
+        $chunk->setContent($newHtmlContent);
+        $chunk->save();
+    }
+}
+
+// Funktion zum Einfügen von Inhalten
+function insertContent($htmlContent, $fileContent, $htmlLine, $fileLine) {
+    $htmlLines = explode("\n", $htmlContent);
+    $fileLines = explode("\n", $fileContent);
+
+    $htmlLines[$htmlLine - 1] = $fileLines[$fileLine - 1];
+
+    return implode("\n", $htmlLines);
+}
