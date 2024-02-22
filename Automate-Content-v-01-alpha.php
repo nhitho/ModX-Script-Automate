@@ -7,9 +7,11 @@ require_once MODX_BASE_PATH . 'core/config/config.inc.php';
 $modx = new modX();
 $modx -> initialize('web');
 
-ini_set('max_execution_time', 300); // Setze die maximale Ausführungszeit auf 300 Sekunden (5 Minuten)
-ini_set('memory_limit', '512M');    // Setze das Speicherlimit auf 512 Megabyte
+// Setze die maximale Ausführungszeit auf 300 Sekunden (5 Minuten)
+ini_set('max_execution_time', 300);
 
+// Setze das Speicherlimit auf 512 Megabyte 
+ini_set('memory_limit', '512M');    
 
 // Basis-Ordner-Überwachung
 $txt_Doc_A = MODX_BASE_PATH . 'assets/txt-original';
@@ -18,20 +20,10 @@ $txt_Doc_B = MODX_BASE_PATH . 'assets/txt-languages';
 // Tags zum Ignorieren
 $ignoreTags = array('<.*>');
 
-#
-#    Es gibt einige Zeilen die mit "// Debug : *" beginnen.
-#    Um die Debugmodus zu kommentieren benutze entweder # oder // vor der Funktion.
-#    Einige LOG_LEVEL_ERROR besiten kein Kommentar mit Debug. Die sollten natürlich nicht auskommentiert werden.
-#
-
-
 /*                 Hauptfunktion                              */
 
 // Überprüfe, ob die TXT-Ordner existieren
 if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
-    
-    //Debug: Initialsisierung
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Die TXT-Ordner existieren.'); 
     
     // Durchlaufe alle TXT Dateien im ersten Ordner
     $filesA = scandir($txt_Doc_A);
@@ -41,13 +33,10 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
 
             // Lese der Txt-Datei lesen
             $fileContent = file_get_contents($filePath);
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Überprüfung des Schädlichen Code bei '. $file );
             
             // Funktion zur Überprüfung auf schädlichen Code
             MaliciousCode($fileContent, $modx);
             
-            // Debug: Ausgabe
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Überprüfung der originalen Datei ist abgeschlossen');
         }
     }
     // Durchlaufe alle TXT Dateien im zweiten Ordner
@@ -58,28 +47,28 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
  
             // Lese der Txt-Datei lesen
             $fileContent = file_get_contents($filePath);
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Starte Überprüfung des Schädlichen Code bei '. $file );
             
             // Funktion zur Überprüfung auf schädlichen Code
             MaliciousCode($fileContent, $modx);
 
-            // Debug: Ausgabe
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Überprüfung der Datei '. $file.' ist abgeschlossen');
         }
     }
     
     // Lade Inhalte von Content-Ressourcen und TV-Variablen
-    $Ressourcelinks = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx);
+    $RessourceLinks = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx);
     
+    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($RessourceLinks, true));
+
     // Lade Inhalte von Chunks
-    $Chunklinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx);
+    $ChunkLinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx);
 
-    // Duplikation und Erstellung der Inhalte
-    #allgetTogether($txt_Doc_B, $Ressourcelinks, $Chunklinks, $modx);    
+    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($ChunkLinks, true));
+    
+    // Füge die Inhalte in die neuen Kontext, Kategorieren und Chunks ein
+    #allgetTogether($txt_Doc_B, $RessourceLinks, $ChunkLinks, $modx);
 
-    // Endkommentar
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Alle Prozesse sind abgeschlossen.');
-
+    // Debug: Ausgabe
+    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Alle Inhalte wurden erfolgreich in die neuen Kontext, Kategorien und Chunks eingefügt.');
 } 
 else {
     // Debug: Ausgabe
@@ -119,11 +108,36 @@ function MaliciousCode($content, $modx) {
     }
 }
 
+/*                          Hilfsfunktionen                                               */
+
+// Funktion zum Entfernen des BOM-Zeichens
+function removeBOM($text) {
+    $bom = pack('H*','EFBBBF');
+    $text = preg_replace("/^$bom/", '', $text);
+    return $text;
+}
+
+// Funktion zur Ermittlung der Positionen im Text
+function getPositionText($fileContent, $modx) {
+    $pos_Text = array();
+
+    // Zeilenweises Aufteilen des Texts
+    $linesText = explode("\n", $fileContent);
+    foreach ($linesText as $i => $line) {
+        $pos_Text[] = [
+            'file_line' => $i + 1, // Startet mit 1
+            'file_content' => $line,
+        ];
+    }
+
+    return $pos_Text;
+}
+
 /*                           Ressource                                                */
 
 // Funktion zum Vergleich der Ressource Content und TXT Inhalt
-function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
-    $Ressourcelinks = array();
+function compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx) {
+    $linkArray = array();
 
     // Rufe die Funktion zum Aufruf des ModX Kontext key 'web'
     $webResources = getWebContextResources($modx);
@@ -138,13 +152,13 @@ function compareContentWithTxt($txt_Doc_A, $ignoreTags = array(), $modx) {
             $fileContent = file_get_contents($filePath);
 
             // Vergleiche die Ressourcen Inhalte mit dem TXT Inhalt
-            $Ressourcelinks = compareTexts($fileContent, $webResources, $ignoreTags, $modx);
+            $result = compareWebTexts($fileContent, $webResources, $ignoreTags, $modx, $filePath);
+
 
         }
     }
-
     // Gebe das Verknüpfungsarray zurück
-    return $Ressourcelinks;
+    return $result;
 }
 
 // Funktion zum Aufruf des Modx Kontext key 'web'
@@ -158,11 +172,9 @@ function getWebContextResources($modx) {
         $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Laden der Ressourcen: ' . $webContext->error); 
     }
 
-
     // Speichere ID, Content, Titel, Alias und Template-Variablen in einen Array ab
     $resultArray = array();
     foreach ($resources as $resource) {
-        $tvArray = getTVfromRessource($resource);
 
          // Füge Informationen zur Ressource inkl. Template-Variablen dem Ergebnisarray hinzu
         $resultArray[] = array(
@@ -170,74 +182,62 @@ function getWebContextResources($modx) {
             'content' => $resource->get('content'),
             'title' => $resource->get('pagetitle'),
             'alias' => $resource->get('alias'),
-            'tv_variable' => $tvArray,
         );
     }
-     
-    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($resultArray, true));
 
     // Gebe den Array zurück
     return $resultArray;
 }
 
-// Funktion zum Vergleich von Texten
-function compareTexts($fileContent, $webResources, $ignoreTags, $modx) {
-    $linkArray = array();
-    
-    // Rufe die Positionen für die Ressource auf.
+function compareWebTexts($fileContent, $webResources, $ignoreTags, $modx, $filePath) {
+    $threshold = 50; // Schwellenwert für die Ähnlichkeit
+
+    // Positionen für die Ressource und den Text ermitteln
     $pos_Ressource = getPositionRessource($webResources, $ignoreTags, $modx);
-    
-    // Rufe die Position für die Ressource auf.
-    $pos_TVText = getPositionTV($webResources, $modx);
-    
-    // Rufe die Positionen für die Datei auf.
     $pos_Text = getPositionText($fileContent, $modx);
 
+    // Durchlaufe alle Positionen der Ressource
     foreach ($pos_Ressource as $positionRessource) {
-        // Ignoriere Tags der Ressourcen Content
-        $cleanedResourceContent = strip_tags($positionRessource['html_content'], implode('', $ignoreTags));
+        // Inhalt der Ressource bereinigen und BOM-Zeichen entfernen
+        $cleanedResourceContent = trim(strip_tags($positionRessource['html_content'], implode('', $ignoreTags)));
+        $cleanedResourceContent = removeBOM($cleanedResourceContent);
 
-        // Durchlaufe die ermittelten Positionen für den Text
+        // Bestes Ergebnis initialisieren
+        $bestMatch = array('percentage' => 0);
+
+        // Durchlaufe alle Positionen des Texts
         foreach ($pos_Text as $positionText) {
-            // Vergleiche die Textinhalte genau mit strcmp
-            $comparison = strcmp($cleanedResourceContent, $positionText['file_content']);
+            // Inhalt des Texts bereinigen und BOM-Zeichen entfernen
+            $cleanedTextContent = removeBOM($positionText['file_content']);
 
-            // Suche nach dem Text aus der Ressource in der Textdatei
-            $pos = strpos($positionText['file_content'], $cleanedResourceContent);
+            // Überprüfe, ob das Muster [[$de.technischedaten]] im HTML-Content vorkommt und ignoriere es
+            $cleanedResourceContent = preg_replace('/\[\[\$de\.technischedaten\]\]/', '', $cleanedResourceContent);
 
-            foreach ($pos_TVText as $positionTVText) {
-                // Ignoriere Markdown der TV content
-                $cleanedTVContent = filterTextFromTV($positionTVText['tv_value']);
+            // Berechne die Ähnlichkeit der Texte
+            similar_text($cleanedResourceContent, $positionText['file_content'], $percentage);
 
-                // Vergleiche die Textinhalte genau mit strcmp
-                $comparisonT = strcmp($cleanedTVContent, $positionText['file_content']);
-
-                $posT = strpos($positionText['file_content'], $cleanedTVContent);
-
-                // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
-                if ($comparison === 0 && $pos !== false && $posC !== false) {
-                    // Füge alle relevanten Informationen zum Verknüpfungsarray hinzu
-                    $linkArray[] = array(
-                        'id' => $positionRessource['id'],
-                        'html_line' => $positionRessource['html_line'],
-                        'html_content' => $positionRessource['html_content'],
-                        'tv_id' => $positionTVText['tv_id'],
-                        'tv_line' => $positionTVText['tv_line'],
-                        'tv_value' => $positionTVText['tv_value'],
-                        'file_line' => $positionText['file_line'],
-                        'file_content' => $positionText['file_content'],
-                    );
-
-                    // Debug: Ausgabe
-                    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Text gefunden.');
-
-                    // Breche die innere Schleife ab, da ein Match gefunden wurde
-                    break;
-                }
+            // Wenn der prozentuale Ähnlichkeitswert den Schwellenwert übersteigt und besser ist als das bisher beste Ergebnis
+            if ($percentage >= $threshold && $percentage > $bestMatch['percentage']) {
+                // Speichere das beste Ergebnis
+                $bestMatch = array(
+                    'percentage' => $percentage,
+                    'id' => $positionRessource['id'],
+                    'html_line' => $positionRessource['html_line'],
+                    'html_content' => $positionRessource['html_content'],
+                    'file_line' => $positionText['file_line'],
+                    'file_content' => $positionText['file_content'],
+                );
             }
         }
+ 
+        // Wenn ein gültiges Ergebnis gefunden wurde, füge es zum Ergebnisarray hinzu
+        if ($bestMatch['percentage'] > 0) {
+            $linkArray[] = $bestMatch;
+        }
     }
-        return $linkArray;
+
+    // Gebe das Ergebnisarray zurück
+    return $linkArray;
 }
 
 // Funktion der Auslesung der Positionen vom Ressource
@@ -246,8 +246,7 @@ function getPositionRessource($webResources, $ignoreTags, $modx) {
 
     foreach ($webResources as $resource) {
         // Ignoriere Tags der Ressourcen Content
-        $cleanedResourceContent = strip_tags($resource['content'], implode('', $ignoreTags));
-
+        $cleanedResourceContent = preg_replace('#<[^>]+>#', '', $resource['content']);
         // Suche nach Positionen im HTML-Text
         $linesResource = explode("\n", $cleanedResourceContent);
         foreach ($linesResource as $i => $line) {
@@ -259,135 +258,22 @@ function getPositionRessource($webResources, $ignoreTags, $modx) {
             ];
         }
     }
-
     // Hier hast du nun alle Positionen mit den Zeilennummern und den Inhalten der Zeilen
     return $pos_Ressource;
 }
 
-// Funktion der Auslesung der Positionen vom Text
-function getPositionText($fileContent, $modx) {
-    $pos_Text = array();
-
-    // Suche nach Positionen in der Textdatei
-    $linesFile = explode("\n", $fileContent);
-    foreach ($linesFile as $i => $line) {
-        
-        $pos_Text[] = [
-            'file_line' => $i + 1, // Startet mit 1
-            'file_content' => $line,
-        ];
-    }
-
-    // Hier hast du nun alle Positionen mit den Zeilennummern und den Inhalten der Zeilen
-    return $pos_Text;
-}
-
-/*                           Template Variable                                            */
-
-// Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
-function getTVfromRessource($resource) {
-    $tvArray = array();
-
-    // Lese alle Template-Variablen der Ressource
-    $tvList = $resource->getTemplateVars();
-
-    // Durchlaufe die Template-Variablen und speichere sie in einem Array
-    foreach ($tvList as $tv) {
-        $tvArray[] = array(
-            'tv_id' => $tv->get('id'),
-            'tv_name' => $tv->get('name'),
-            'tv_value' => $tv->get('value'),
-        );
-    }
-
-    // Gebe das Array mit den Template-Variablen zurück
-    return $tvArray;
-}
-
-// Vergleich von Template-Variablen mit Text
-function compareTVTextsWithTxt($filecontent, $webResources,$ignoreTags, $modx) {
-    $linkTVArray = array();
-
-            // Rufe die Positionen für die TV-Variable auf.
-            $pos_TVText = getPositionTV($webResources, $modx);
-
-            // Rufe die Positionen für die Datei auf.
-            $pos_Text = getPositionText($fileContent, $modx);
-
-            foreach ($pos_TVText as $positionTVText) {
-                // Durchlaufe die ermittelten Positionen für die TV-Variable
-                foreach ($tvArray as $tv) {
-                    $tvID = $tv['tv_id'];
-                    $tvName = $tv['tv_name'];
-                    $tvValue = $tv['tv_value'];
-
-                    // Vergleiche die Template-Variablen Inhalte mit dem TV-Variable Inhalt aus der TXT Datei
-                    $comparison = strcmp($positionTVText['tv_content'], $tvValue);
-
-                    // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
-                    if ($comparison === 0) {
-                        // Füge alle relevanten Informationen zum Verknüpfungsarray hinzu
-                        $linkTVArray[] = array(
-                            'tv_id' => $tvID,
-                            'tv_name' => $tvName,
-                            'tv_value' => $tvValue,
-                            'file_line' => $positionTVText['tv_line'],
-                            'file_content' => $positionTVText['tv_content'],
-                        );
-
-                        // Debug: Ausgabe
-                        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Template-Variablen Text gefunden.');
-
-                        // Breche die innere Schleife ab, da ein Match gefunden wurde
-                        break;
-                    }
-                }
-            }
-    // Gebe das Verknüpfungsarray zurück
-    return $linkTVArray;
-}
-
-// Funktion der Auslesung der Positionen vom Template-Variable des Ressouruces
-function getPositionTV($tvValue, $modx) {
-    $pos_TVText = array();
-
-    // Suche nach Positionen im Template-Variable-Text
-    $linesTV = explode("\n", $tvValue);
-    foreach ($linesTV as $i => $line) {
-        $pos_TVText[] = [
-            'tv_line' => $i + 1, // Startet mit 1
-            'tv_content' => $line,
-        ];
-    }
-
-    // Hier hast du nun alle Positionen mit den Zeilennummern und den Inhalten der Zeilen
-    return $pos_TVText;
-}
-
-// Funktion zum Extrahieren des Textinhalts aus dem JSON-ähnlichen String
-function filterTextFromTV($jsonString) {
-    // Hier definieren wir ein einfaches Pattern, das "name:" oder "CaptionText:" und den Text danach erfasst
-    $pattern = '/"name":"(.*?)"|"CaptionText":"(.*?)"/';
-
-    // Hier führen wir eine preg_match_all durch, um alle Übereinstimmungen zu finden
-    preg_match_all($pattern, $jsonString, $matches);
-
-    // Hier kombinieren wir die Übereinstimmungen für "name:" und "CaptionText:"
-    $combinedMatches = array_merge($matches[1], $matches[2]);
-
-    // Hier filtern wir leere Einträge heraus
-    $filteredMatches = array_filter($combinedMatches);
-
-    // Hier geben wir den ersten Nicht-leeren Eintrag zurück oder null, wenn keiner vorhanden ist
-    return reset($filteredMatches) ?: null;
-}
-
 /*                           Chunks                                                        */
 
-function compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx){
+//  Ruft die Chunks auf und vergleicht Sie mit dem Text
+function compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx){
+    //Initialisierung
+    $chunkArray = array();
 
+    //Hole die Chunk Inhalte samt ID, Content
+    $ChunkContent = getChunksContent($modx);
+    
     // Durchlaufe alle TXT Dateien im ersten Ordner
-    $filesA=scandir($txt_Doc_A);
+    $filesA = scandir($txt_Doc_A);
     foreach ($filesA as $file) {
         if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
             $filePath = $txt_Doc_A . '/' . $file;
@@ -395,107 +281,119 @@ function compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx){
             // Lese der Txt-Datei lesen
             $fileContent = file_get_contents($filePath);
 
-            // Lade Inhalte von Chunks
-            $Chunklinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx);
+             // Durchlaufe die Chunks und vergleiche Sie mit dem Text
+            $ChunkLinks = compareChunkText($fileContent, $ChunkContent, $ignoreTags, $modx, $filePath);
         }
-
-    // Debug: Ausgabe
-    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($Chunklinks, true));
-
-    // Gebe das Verknüpfungsarray zurück
-    return $Chunklinks;
+    }
+    return $ChunkLinks;
 }
 
-// Vergleich mit Chunks und Text
-function ChunksTextsWithTxt($filecontent, $webResources,$ignoreTags, $modx) {
-    $linkChunksArray = array();
-
-            // Rufe die Positionen für die Chunks auf.
-            $pos_Chunks = getPositionChunks($webResources, $modx);
-
-            // Rufe die Positionen für die Datei auf.
-            $pos_Text = getPositionText($fileContent, $modx);
-
-            foreach ($pos_Chunks as $positionChunks) {
-                // Durchlaufe die ermittelten Positionen für die Chunks
-                foreach ($chunkArray as $chunk) {
-                    $chunkID = $chunk['chunk_id'];
-                    $chunkContent = $chunk['chunk_content'];
-
-                    // Vergleiche die Chunks Inhalte mit dem Chunk Inhalt aus der TXT Datei
-                    $comparison = strcmp($positionChunks['chunk_content'], $chunkContent);
-
-                    // Wenn Übereinstimmung gefunden wurde, füge es zum Verknüpfungsarray hinzu
-                    if ($comparison === 0) {
-                        // Füge alle relevanten Informationen zum Verknüpfungsarray hinzu
-                        $linkChunksArray[] = array(
-                            'chunk_id' => $chunkID,
-                            'chunk_content' => $chunkContent,
-                            'file_line' => $positionChunks['chunk_line'],
-                            'file_content' => $positionChunks['chunk_content'],
-                        );
-
-                        // Debug: Ausgabe
-                        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Chunks Text gefunden.');
-
-                        // Breche die innere Schleife ab, da ein Match gefunden wurde
-                        break;
-                    }
-                }
-            }
-    // Gebe das Verknüpfungsarray zurück
-    return $linkChunksArray;
-}
-
-// Funktion der Auslesung der Position von Chunks
-function getAllChunksContent($modx) {
+// Ruft Chunks auf
+function getChunksContent($modx) {
     $chunks = $modx->getCollection('modChunk');
-    $chunkArray = array();
 
     foreach ($chunks as $chunk) {
-        $chunkArray[] = array(
-            'id' => $chunk->get('id'),
-            'content' => $chunk->get('content'),
-        );
+        $chunkContent = $chunk->get('content');
+        $strippedContent = strip_tags($chunkContent);
+        
+        // Überprüfe, ob der Inhalt nicht leer ist
+        if (!empty($strippedContent)) {
+            $chunkArray[] = array(
+                'id' => $chunk->get('id'),
+                'name' => $chunk->get('name'),
+                'content' => $chunkContent,
+                'category' => $chunk->get('category'),
+            );
+        }
     }
-
     return $chunkArray;
 }
 
-// Funktion der Auslesung der Positionen vom Chunk
-function getPositonChunks() {
-    $pos_Chunks= array();
+// Vergleicht Chunk mit Text
+function compareChunkText($fileContent, $ChunkContent, $ignoreTags, $modx, $filePath){
+    // Schwellenwert für die Ähnlichkeit
+    $threshold = 50; 
+
+    // Rufe die Positionen für die Chunks auf.
+    $pos_Chunk = getPositonChunks($ChunkContent, $modx);
+
+    // Rufe die Positionen für die Datei auf.
+    $pos_Text = getPositionText($fileContent, $modx);
+
+    foreach ($pos_Chunk as $positionChunk) {
+        // Inhalt der Chunk bereinigen und BOM-Zeichen entfernen
+        $cleanedChunkContent =trim(strip_tags($positionChunk['html_content'], implode('', $ignoreTags)));
+        $cleanedChunkContent = removeBOM($cleanedChunkContent);
+
+        // Bestes Ergebnis initialisieren
+        $bestMatch = array('percentage' => 0);
+            
+        // Durchlaufe die ermittelten Positionen für den Text
+        foreach ($pos_Text as $positionText) {
+            // Vergleiche die Textinhalte genau mit strcmp
+            $comparison =  strcmp($positionChunk('html_content'), $positionText('file_content'));
+
+            // Inhalt des Texts bereinigen und BOM-Zeichen entfernen
+            $cleanedTextContent = removeBOM($positionText['file_content']);
+
+            // Suche nach dem Text aus der Ressource in der Textdatei
+            $pos = strpos($positionChunk('html_content'),$positionText['file_content']);
+            // Überprüfe, ob das Muster im HTML-Content vorkommt und ignoriere es
+            $cleanedChunkContent = preg_replace('#<[^>]+>#', '', $positionChunk['html_content']);
+
+            // Berechne die Ähnlichkeit der Texte
+            similar_text($cleanedChunkContent, $positionText['file_content'], $percentage);
+        
+            // Wenn der prozentuale Ähnlichkeitswert den Schwellenwert übersteigt und besser ist als das bisher beste Ergebnis
+            if ($percentage >= $threshold && $percentage > $bestMatch['percentage']) {
+                // Speichere das beste Ergebnis
+                $bestMatch = array(
+                    'percentage' => $percentage,
+                    'chunk_id' => $positionChunk['id'],
+                    'chunk_line' => $positionChunk['html_line'],
+                    'chunk_content' => $positionChunk['html_content'],
+                    'file_line' => $positionText['file_line'],
+                    'file_content' => $positionText['file_content'],
+                );
+            }
+        }
+    }
+    // Wenn ein gültiges Ergebnis gefunden wurde, füge es zum Ergebnisarray hinzu
+    if ($bestMatch['percentage'] > 0) {
+            $chunkArray[] = $bestMatch;
+    }
+    return $chunkArray;
+    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($chunkArray, true));
 }
 
+
+
+
+
+
+// Funktion der Auslesung der Positionen vom Chunk
+function getPositonChunks($ChunkContent, $modx) {
+
+    foreach ($ChunkContent as $resource) {
+        // Ignoriere Tags der Chunks Content
+        $cleanedChunkContent = preg_replace('#<[^>]+>#', '', $resource['content']);
+
+        // Suche nach Positionen im HTML-Text
+        $linesResource = explode("\n", $cleanedChunkContent);
+        foreach ($linesResource as $i => $line) {
+            
+            $pos_Chunk[] = [ 
+                'id' => $resource['id'],
+                'html_line' => $i + 1, 
+                'html_content' => $line,
+                'category' => $resource['category'], 
+            ];
+        }
+    }
+    return $pos_Chunk;
+}
 
 /*                  Dateinamen und Dateiinhalt extrahieren                                 */
-
-// Filenamen Extrahieren für Sprache
-function fileNameLangExtract ($filePath, $modx){
-    
-    //Debug: Initialisierung
-    $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wird extrahiert aus den Dateinamen...");
-
-    // Suchmuster für Sprachenkürzel
-    $pattern = '/^[^-]+-(.*?)-[a-zA-Z]+\.txt/';
-
-    // Lese der Txt-Datei lesen
-    $fileContent = file_get_contents($filePath);
-
-    // Überprüfe, ob das Muster in der Datei gefunden wird
-    if (preg_match($pattern, $fileContent, $matches)) {
-        
-        $LangInit = $matches[1];
-        
-        // Debug: Anzeige des Inhalts von $LangInit
-        $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wurde extrahiert: $LangInit");
-        
-        return $LangInit;
-    }
-
-    $modx->log(xPDO::LOG_LEVEL_ERROR, "Kein Sprachenkürzel gefunden.");
-    return null;
-}
 
 // Filenamen Extrahieren für Sprache
 function fileNameLangExtract($txt_Doc_B, $modx) {
@@ -531,7 +429,6 @@ function fileNameLangExtract($txt_Doc_B, $modx) {
         }
     }
 }
-            
 
 /*                  Duplizierung und Erstellung der neuen Inhalten                         */
 
@@ -589,7 +486,7 @@ function createLangContext($langCode, $modx) {
         'menuindex' => 0,
         'default' => 0,
         'config' => '',
-        'base_url' => '/'$langCode.'/',
+        'base_url' => '/'. $langCode.'/',
     ));
 
     // Speichere den Kontext
@@ -602,7 +499,7 @@ function createLangContext($langCode, $modx) {
 }
 
 //Funktion zum Erstellen einer Kategorie
-function createLangCategory($langCode, $modx);{
+function createLangCategory($langCode, $modx){
     // Erstelle die Kategorie
     $langCategory = $modx->newObject('modCategory');
     $langCategory->fromArray(array(
@@ -672,3 +569,64 @@ function insertContent($htmlContent, $fileContent, $htmlLine, $fileLine) {
 
     return implode("\n", $htmlLines);
 }
+
+
+/*                           (In Development) Template Variable                                            */
+/* 
+// Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
+function getTVfromRessource($resource) {
+    $tvArray = array();
+
+    // Lese alle Template-Variablen der Ressource
+    $tvList = $resource->getTemplateVars();
+
+    // Durchlaufe die Template-Variablen und speichere sie in einem Array
+    foreach ($tvList as $tv) {
+        $tvArray[] = array(
+            'tv_id' => $tv->get('id'),
+            'tv_name' => $tv->get('name'),
+            'tv_value' => $tv->get('value'),
+        );
+    }
+
+    // Gebe das Array mit den Template-Variablen zurück
+    return $tvArray;
+}
+
+// Funktion zur Ermittlung der Positionen der Template-Variablen
+function getPositionTV($webResources, $modx) {
+    $pos_TV = array();
+
+    foreach ($webResources as $resource) {
+        foreach ($resource['tv_variable'] as $tv) {
+            // Ignoriere Tags der Template-Variablen
+            $cleanedTVContent = strip_tags($tv['tv_value']);
+
+            // Suche nach Positionen im Template-Variablen-Text
+            $linesTV = explode("\n", $cleanedTVContent);
+            foreach ($linesTV as $i => $line) {
+                $pos_TV[] = [
+                    'resource_id' => $resource['id'],
+                    'tv_line' => $i + 1, // Startet mit 1
+                    'tv_content' => $line,
+                ];
+            }
+        }
+    }
+
+    // Hier hast du nun alle Positionen der Template-Variablen mit den Zeilennummern und den Inhalten der Zeilen
+    return $pos_TV;
+}
+
+// Funktion zum Extrahieren des Textinhalts aus dem JSON-ähnlichen String
+function filterTextFromTV($jsonString) {
+    // Hier definieren wir ein einfaches Pattern, das "name:" oder "CaptionText:" und den Text danach erfasst
+    $pattern = '/"name":"(.*?)"|"CaptionText":"(.*?)"/';
+
+    // Hier führen wir eine preg_match durch, um die erste Übereinstimmung zu finden
+    preg_match($pattern, $jsonString, $matches);
+
+    // Hier geben wir den ersten Nicht-leeren Eintrag zurück oder null, wenn keiner vorhanden ist
+    return isset($matches[1]) ? $matches[1] : (isset($matches[2]) ? $matches[2] : null);
+}
+*/
