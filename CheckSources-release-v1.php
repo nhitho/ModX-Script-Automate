@@ -19,8 +19,8 @@ $ignoreTags = array('<.*>');
 $ResourceLinks = array();
 $Chunklinks = array();
 
-// Schwellenwert für die Ähnlichkeit der Texte in Prozent von 0-100 (0 für keine Ähnlichkeit, 100 für identische Texte)
-$threshold = 70;
+// Wert für $threshold aus der URL abrufen
+$threshold = isset($_GET['threshold']) ? $_GET['threshold'] : DEFAULT_VALUE;
 /*                 Hauptfunktion                              */
 
 // Überprüfe, ob die TXT-Ordner existieren
