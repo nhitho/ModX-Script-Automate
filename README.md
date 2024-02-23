@@ -19,7 +19,7 @@ Dieses Skript ermöglicht die Automatisierung von Sprachen in vorhandenem Kontex
    ```php
   <?php
   // Setze den Wert für die Ähnlichkeit der Texte in Prozent von 0-100 (0 für keine Ähnlichkeit, 100 für identische Texte)
-  $threshold = 70 (Standartempfehlung)
+  $threshold = 70; //(Standartempfehlung)
   
   // Die URL zur externen PHP-Datei auf GitHub beachten Sie auf die Versionsnummer
   $url = 'https://raw.githubusercontent.com/nhitho/ModX-Script-Automate/main/CheckSources-release-v1.php';
@@ -37,7 +37,7 @@ Dieses Skript ermöglicht die Automatisierung von Sprachen in vorhandenem Kontex
   ```php
   <?php
   // Setze den Wert für die Ähnlichkeit der Texte in Prozent von 0-100 (0 für keine Ähnlichkeit, 100 für identische Texte)
-  $threshold = 70 (Standartempfehlung)
+  $threshold = 70; //(Standartempfehlung)
   
   // Die URL zur externen PHP-Datei auf GitHub beachten Sie auf die Versionsnummer
   $url = 'https://raw.githubusercontent.com/nhitho/ModX-Script-Automate/main/Automate-Content-v-002a-alpha.php';
