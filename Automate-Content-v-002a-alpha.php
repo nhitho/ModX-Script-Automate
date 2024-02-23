@@ -20,6 +20,12 @@ $txt_Doc_B = MODX_BASE_PATH . 'assets/txt-languages';
 // Tags zum Ignorieren
 $ignoreTags = array('<.*>');
 
+//Initailisierung
+$ResourceLinks = array();
+$Chunklinks = array();
+
+// Treshhold
+$threshold = 70;
 /*                 Hauptfunktion                              */
 
 // Überprüfe, ob die TXT-Ordner existieren
@@ -55,12 +61,12 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
     }
     
     // Lade Inhalte von Content-Ressourcen und TV-Variablen
-    $RessourceLinks = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx);
+    $RessourceLinks = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold);
     
     $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($RessourceLinks, true));
 
     // Lade Inhalte von Chunks
-    $ChunkLinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx);
+    $ChunkLinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold);
 
     $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($ChunkLinks, true));
     
@@ -136,7 +142,7 @@ function getPositionText($fileContent, $modx) {
 /*                           Ressource                                                */
 
 // Funktion zum Vergleich der Ressource Content und TXT Inhalt
-function compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx) {
+function compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold) {
     $linkArray = array();
 
     // Rufe die Funktion zum Aufruf des ModX Kontext key 'web'
@@ -152,7 +158,7 @@ function compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx) {
             $fileContent = file_get_contents($filePath);
 
             // Vergleiche die Ressourcen Inhalte mit dem TXT Inhalt
-            $result = compareWebTexts($fileContent, $webResources, $ignoreTags, $modx, $filePath);
+            $result = compareWebTexts($fileContent, $webResources, $ignoreTags, $modx, $filePath, $threshold);
 
 
         }
@@ -189,8 +195,7 @@ function getWebContextResources($modx) {
     return $resultArray;
 }
 
-function compareWebTexts($fileContent, $webResources, $ignoreTags, $modx, $filePath) {
-    $threshold = 50; // Schwellenwert für die Ähnlichkeit
+function compareWebTexts($fileContent, $webResources, $ignoreTags, $modx, $filePath, $threshold) {
 
     // Positionen für die Ressource und den Text ermitteln
     $pos_Ressource = getPositionRessource($webResources, $ignoreTags, $modx);
@@ -265,9 +270,9 @@ function getPositionRessource($webResources, $ignoreTags, $modx) {
 /*                           Chunks                                                        */
 
 //  Ruft die Chunks auf und vergleicht Sie mit dem Text
-function compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx){
-    //Initialisierung
-    $chunkArray = array();
+function compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold){
+    $ChunkLinks = array();
+
 
     //Hole die Chunk Inhalte samt ID, Content
     $ChunkContent = getChunksContent($modx);
@@ -282,7 +287,7 @@ function compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx){
             $fileContent = file_get_contents($filePath);
 
              // Durchlaufe die Chunks und vergleiche Sie mit dem Text
-            $ChunkLinks = compareChunkText($fileContent, $ChunkContent, $ignoreTags, $modx, $filePath);
+            $ChunkLinks = compareChunkText($fileContent, $ChunkContent, $ignoreTags, $modx, $filePath, $threshold);
         }
     }
     return $ChunkLinks;
@@ -290,29 +295,24 @@ function compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx){
 
 // Ruft Chunks auf
 function getChunksContent($modx) {
+    $ChunkContent = array();
+    
     $chunks = $modx->getCollection('modChunk');
-
+    
     foreach ($chunks as $chunk) {
-        $chunkContent = $chunk->get('content');
-        $strippedContent = strip_tags($chunkContent);
-        
-        // Überprüfe, ob der Inhalt nicht leer ist
-        if (!empty($strippedContent)) {
-            $chunkArray[] = array(
-                'id' => $chunk->get('id'),
-                'name' => $chunk->get('name'),
-                'content' => $chunkContent,
-                'category' => $chunk->get('category'),
+        $ChunkContent[] = array(
+            'id' => $chunk->get('id'),
+            'name' => $chunk->get('name'),
+            'content' => $chunk->get('content'),
+            'category' => $chunk->get('category'),
             );
-        }
     }
-    return $chunkArray;
+    return $ChunkContent;
 }
 
 // Vergleicht Chunk mit Text
-function compareChunkText($fileContent, $ChunkContent, $ignoreTags, $modx, $filePath){
-    // Schwellenwert für die Ähnlichkeit
-    $threshold = 50; 
+function compareChunkText($fileContent, $ChunkContent, $ignoreTags, $modx, $filePath, $threshold) {
+    $chunkArray = array();
 
     // Rufe die Positionen für die Chunks auf.
     $pos_Chunk = getPositonChunks($ChunkContent, $modx);
@@ -322,74 +322,78 @@ function compareChunkText($fileContent, $ChunkContent, $ignoreTags, $modx, $file
 
     foreach ($pos_Chunk as $positionChunk) {
         // Inhalt der Chunk bereinigen und BOM-Zeichen entfernen
-        $cleanedChunkContent =trim(strip_tags($positionChunk['html_content'], implode('', $ignoreTags)));
+        $cleanedChunkContent = trim(strip_tags($positionChunk['html_content'], implode('', $ignoreTags)));
         $cleanedChunkContent = removeBOM($cleanedChunkContent);
 
         // Bestes Ergebnis initialisieren
         $bestMatch = array('percentage' => 0);
-            
+
         // Durchlaufe die ermittelten Positionen für den Text
         foreach ($pos_Text as $positionText) {
-            // Vergleiche die Textinhalte genau mit strcmp
-            $comparison =  strcmp($positionChunk('html_content'), $positionText('file_content'));
-
             // Inhalt des Texts bereinigen und BOM-Zeichen entfernen
             $cleanedTextContent = removeBOM($positionText['file_content']);
 
-            // Suche nach dem Text aus der Ressource in der Textdatei
-            $pos = strpos($positionChunk('html_content'),$positionText['file_content']);
-            // Überprüfe, ob das Muster im HTML-Content vorkommt und ignoriere es
-            $cleanedChunkContent = preg_replace('#<[^>]+>#', '', $positionChunk['html_content']);
+            if ($positionChunk['category'] > 0) {
 
-            // Berechne die Ähnlichkeit der Texte
-            similar_text($cleanedChunkContent, $positionText['file_content'], $percentage);
-        
-            // Wenn der prozentuale Ähnlichkeitswert den Schwellenwert übersteigt und besser ist als das bisher beste Ergebnis
-            if ($percentage >= $threshold && $percentage > $bestMatch['percentage']) {
-                // Speichere das beste Ergebnis
-                $bestMatch = array(
-                    'percentage' => $percentage,
-                    'chunk_id' => $positionChunk['id'],
-                    'chunk_line' => $positionChunk['html_line'],
-                    'chunk_content' => $positionChunk['html_content'],
-                    'file_line' => $positionText['file_line'],
-                    'file_content' => $positionText['file_content'],
-                );
+            
+                // Berechne die Ähnlichkeit der Texte
+                similar_text($cleanedChunkContent, $cleanedTextContent, $percentage);
+
+                // Wenn der prozentuale Ähnlichkeitswert den Schwellenwert übersteigt und besser ist als das bisher beste Ergebnis
+                if ($percentage >= $threshold && $percentage > $bestMatch['percentage']) {
+                    // Speichere das beste Ergebnis
+                    $bestMatch = array(
+                        'percentage' => $percentage,
+                        'chunk_id' => $positionChunk['id'],
+                        'chunk_line' => $positionChunk['html_line'],
+                        'chunk_content' => $positionChunk['html_content'],
+                        'file_line' => $positionText['file_line'],
+                        'file_content' => $positionText['file_content'],
+                        'category' => $positionChunk['category'],
+                    );
+                }
             }
         }
-    }
-    // Wenn ein gültiges Ergebnis gefunden wurde, füge es zum Ergebnisarray hinzu
-    if ($bestMatch['percentage'] > 0) {
+
+        // Wenn ein gültiges Ergebnis gefunden wurde, füge es zum Ergebnisarray hinzu
+        if ($bestMatch['percentage'] > 0) {
             $chunkArray[] = $bestMatch;
+        }
     }
+
+    // Wenn Sie für Debugging-Zwecke das Ergebnisarray protokollieren möchten, können Sie dies hier tun
+    // $modx->log(xPDO::LOG_LEVEL_DEBUG, print_r($chunkArray, true));
+
     return $chunkArray;
-    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($chunkArray, true));
 }
-
-
-
-
-
 
 // Funktion der Auslesung der Positionen vom Chunk
 function getPositonChunks($ChunkContent, $modx) {
 
     foreach ($ChunkContent as $resource) {
-        // Ignoriere Tags der Chunks Content
-        $cleanedChunkContent = preg_replace('#<[^>]+>#', '', $resource['content']);
+        
+        //Strip Tags des Chunk Contents
+        $cleanedChunkContent = strip_tags($resource['content']);
 
         // Suche nach Positionen im HTML-Text
         $linesResource = explode("\n", $cleanedChunkContent);
+
         foreach ($linesResource as $i => $line) {
-            
-            $pos_Chunk[] = [ 
-                'id' => $resource['id'],
-                'html_line' => $i + 1, 
-                'html_content' => $line,
-                'category' => $resource['category'], 
-            ];
+            // Entferne HTML-Entity-Leerzeichen (&nbsp;) und trimme Leerzeichen
+            $line = trim(str_replace('&nbsp;', ' ', $line));
+
+
+            if (!empty($line)) {
+                $pos_Chunk[] = array(
+                    'id' => $resource['id'],
+                    'html_line' => $i + 1,
+                    'html_content' => $line,
+                    'category' => $resource['category'],
+                );
+            }
         }
     }
+    // Hier hast du nun alle Positionen mit den Zeilennummern und den Inhalten der Zeilen
     return $pos_Chunk;
 }
 
