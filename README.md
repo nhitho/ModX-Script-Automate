@@ -13,15 +13,38 @@ Dieses Skript ermöglicht die Automatisierung von Sprachen in vorhandenem Kontex
   **Beachten Sie die http_url und base_url erstellt haben**
 
 2.  Erstellen Sie ein Snippet mit folgendem Code:
-   
+
+
+  // Für Überprüfung dieses Snippet einfügen.
+   ```php
+  <?php
+  // Setze den Wert für die Ähnlichkeit der Texte in Prozent von 0-100 (0 für keine Ähnlichkeit, 100 für identische Texte)
+  $threshold = 70 (Standartempfehlung)
+  
+  // Die URL zur externen PHP-Datei auf GitHub beachten Sie auf die Versionsnummer
+  $url = 'https://raw.githubusercontent.com/nhitho/ModX-Script-Automate/main/CheckSources-release-v1.php';
+
+  // Datei von der URL abrufen
+  $content = file_get_contents($url);
+  
+  // Inhalt der externen PHP-Datei ausführen
+  eval('?>' . $content);
+
+  ```
+
+
+  // Für Automatisierung dieses Snippet einfügen. 
   ```php
   <?php
+  // Setze den Wert für die Ähnlichkeit der Texte in Prozent von 0-100 (0 für keine Ähnlichkeit, 100 für identische Texte)
+  $threshold = 70 (Standartempfehlung)
+  
   // Die URL zur externen PHP-Datei auf GitHub beachten Sie auf die Versionsnummer
   $url = 'https://raw.githubusercontent.com/nhitho/ModX-Script-Automate/main/Automate-Content-v-002a-alpha.php';
 
   // Datei von der URL abrufen
   $content = file_get_contents($url);
-
+  
   // Inhalt der externen PHP-Datei ausführen
   eval('?>' . $content);
 
