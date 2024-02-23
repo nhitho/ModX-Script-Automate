@@ -17,7 +17,7 @@ Dieses Skript ermöglicht die Automatisierung von Sprachen in vorhandenem Kontex
   ```php
   <?php
   // Die URL zur externen PHP-Datei auf GitHub beachten Sie auf die Versionsnummer
-  $url = 'https://raw.githubusercontent.com/nhitho/ModX-Script-Automate/main/Automate-Content-v-002-alpha.php';
+  $url = 'https://raw.githubusercontent.com/nhitho/ModX-Script-Automate/main/Automate-Content-v-002a-alpha.php';
 
   // Datei von der URL abrufen
   $content = file_get_contents($url);
