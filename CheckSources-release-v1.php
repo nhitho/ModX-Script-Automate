@@ -56,7 +56,7 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
     }
     
     // Lade Inhalte von Content-Ressourcen und TV-Variablen
-    $RessourceLinks = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold);
+    $ResourceLinks = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold);
 
     // Lade Inhalte von Chunks
     $ChunkLinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold);
@@ -64,20 +64,20 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
     // Überprüfe, ob der Ordner für das Ergebnis existiert und erstelle ihn, wenn nicht vorhanden
     if (!is_dir($RESULT_TXT)) {
         mkdir($RESULT_TXT, 0777, true);
+        touch($RESULT_TXT . '/result.txt');
     }
 
     // Pfad zur Datei
     $resultFile = $RESULT_TXT . '/result.txt';
 
-    // Öffne die Datei im Schreibmodus oder erstelle sie, wenn sie nicht existiert
-    $handle = fopen($resultFile, 'a');
+    // Inhalt der Arrays
+    $resourceContent = print_r($ResourceLinks, true);
+    $chunkContent = print_r($ChunkLinks, true);
 
     // Schreibe den Inhalt in die Datei
-    fwrite($handle, $ResourceLinks . "\n");
-    fwrite($handle, $ChunkLinks . "\n");
+    file_put_contents($resultFile, $resourceContent . "\n" . $chunkContent);
 
-    // Schließe die Datei
-    fclose($handle);
+
 }
 /*                 Schadwareüberprüfung                                               */
 
