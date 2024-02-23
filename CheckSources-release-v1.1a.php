@@ -20,7 +20,7 @@ $ResourceLinks = array();
 $Chunklinks = array();
 
 // Wert für $threshold aus der URL abrufen
-$threshold = isset($_GET['threshold']) ? $_GET['threshold'] : DEFAULT_VALUE;
+$threshold = 70;
 /*                 Hauptfunktion                              */
 
 // Überprüfe, ob die TXT-Ordner existieren
