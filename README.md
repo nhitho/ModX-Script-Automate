@@ -15,7 +15,7 @@ Dieses Skript ermöglicht die Automatisierung von Sprachen in vorhandenem Kontex
 2.  Erstellen Sie ein Snippet mit folgendem Code:
 
 
-  **Für Überprüfung dieses Snippet einfügen.
+  **Für Überprüfung dieses Snippet einfügen.**
    ```php
   <?php
   // Setze den Wert für die Ähnlichkeit der Texte in Prozent von 0-100 (0 für keine Ähnlichkeit, 100 für identische Texte)
@@ -33,7 +33,7 @@ Dieses Skript ermöglicht die Automatisierung von Sprachen in vorhandenem Kontex
   ```
 
 
-  **Für Automatisierung dieses Snippet einfügen. 
+  **Für Automatisierung dieses Snippet einfügen.**
   ```php
   <?php
   // Setze den Wert für die Ähnlichkeit der Texte in Prozent von 0-100 (0 für keine Ähnlichkeit, 100 für identische Texte)
