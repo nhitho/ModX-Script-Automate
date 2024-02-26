@@ -5,17 +5,13 @@ require_once MODX_BASE_PATH . 'core/config/config.inc.php';
 
 // Initialisieren Sie das MODX-Objekt "web"
 $modx = new modX();
-$modx -> initialize('web');
+$modx -> initialize('web');  
 
-// Setze die maximale Ausführungszeit auf 300 Sekunden (5 Minuten)
-ini_set('max_execution_time', 300);
 
-// Setze das Speicherlimit auf 512 Megabyte 
-ini_set('memory_limit', '512M');    
 
 // Basis-Ordner-Überwachung
-$txt_Doc_A = MODX_BASE_PATH . 'assets/txt-original';
-$txt_Doc_B = MODX_BASE_PATH . 'assets/txt-languages';
+$txt_Doc_A = MODX_BASE_PATH . 'assets/txt-original/';
+$txt_Doc_B = MODX_BASE_PATH . 'assets/txt-languages/';
 
 // Tags zum Ignorieren
 $ignoreTags = array('<.*>');
@@ -24,8 +20,10 @@ $ignoreTags = array('<.*>');
 $ResourceLinks = array();
 $Chunklinks = array();
 
-// Treshhold
+// Schwellenwert für die Ähnlichkeit der Texte in Prozent von 0-100 (0 für keine Ähnlichkeit, 100 für identische Texte)
 $threshold = 70;
+
+
 /*                 Hauptfunktion                              */
 
 // Überprüfe, ob die TXT-Ordner existieren
@@ -63,25 +61,19 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
     // Lade Inhalte von Content-Ressourcen und TV-Variablen
     $RessourceLinks = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold);
     
-    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($RessourceLinks, true));
+    #$modx->log(xPDO::LOG_LEVEL_ERROR, print_r($RessourceLinks, true));
 
     // Lade Inhalte von Chunks
     $ChunkLinks = compareChunksWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold);
 
-    $modx->log(xPDO::LOG_LEVEL_ERROR, print_r($ChunkLinks, true));
+    #$modx->log(xPDO::LOG_LEVEL_ERROR, print_r($ChunkLinks, true));
     
     // Füge die Inhalte in die neuen Kontext, Kategorieren und Chunks ein
-    #allgetTogether($txt_Doc_B, $RessourceLinks, $ChunkLinks, $modx);
-
-    // Debug: Ausgabe
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Alle Inhalte wurden erfolgreich in die neuen Kontext, Kategorien und Chunks eingefügt.');
+    allgetTogether($txt_Doc_B, $RessourceLinks, $ChunkLinks, $modx);
 } 
 else {
     // Debug: Ausgabe
     $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler: Die TXT-Ordner existieren nicht.');
-
-    // Debug: Wenn A oder B nicht existieren.
-    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler: Die TXT-Ordner (A oder B) existieren nicht.');
 }
 
 /*                 Schadwareüberprüfung                                               */
@@ -399,45 +391,40 @@ function getPositonChunks($ChunkContent, $modx) {
 
 /*                  Dateinamen und Dateiinhalt extrahieren                                 */
 
-// Filenamen Extrahieren für Sprache
-function fileNameLangExtract($txt_Doc_B, $modx) {
+// Filenamen Extrahieren für Sprache und Produktnamen
+function fileNameLangExtract($filePath, $modx) {
+
+    // Suchmuster für Sprachenkürzel
+    $patternLang = '/-([a-zA-Z]+)\.txt/';
     
-    // Durchlaufe alle TXT Dateien im zweiten Ordner
-    $filePath = scandir($txt_Doc_B);
-    foreach ($filesB as $file) {
-        if ($file !== '.' && $file !== '..' && pathinfo($file, PATHINFO_EXTENSION) === 'txt') {
-            $filePath = $txt_Doc_B . '/' . $file;
+    // Suchmuster für Produktnamen (gesamter Name ohne ".txt" am Ende)
+    $patternProduct = '/^(.*?)\.txt/';
 
-            // Debug: Initialisierung
-            $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wird extrahiert aus den Dateinamen...");
+    // Extrahiere den Dateinamen aus dem Dateipfad
+    $fileName = basename($filePath);
 
-            // Suchmuster für Sprachenkürzel
-            $pattern = '/^[^-]+-(.*?)-[a-zA-Z]+\.txt/';
-
-            // Extrahiere den Dateinamen aus dem Dateipfad
-            $fileName = basename($filePath);
-
-            // Überprüfe, ob das Muster im Dateinamen gefunden wird
-            if (preg_match($pattern, $fileName, $matches)) {
+    // Überprüfe, ob das Muster im Dateinamen gefunden wird
+    if (preg_match($patternLang, $fileName, $matchesLang) && preg_match($patternProduct, $fileName, $matchesProduct)) {
                 
-                $langCode = $matches[1];
+        $langCode = $matchesLang[1];
+        $productName = $matchesProduct[1];
                 
-                // Debug: Anzeige des extrahierten Sprachenkürzels
-                $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wurde extrahiert: $langCode");
+        // Debug: Anzeige des extrahierten Sprachenkürzels und Produktnamens
+        # $modx->log(xPDO::LOG_LEVEL_ERROR, "Sprachenkürzel wurde extrahiert: $langCode");
+        # $modx->log(xPDO::LOG_LEVEL_ERROR, "Produktname wurde extrahiert: $productName");
                 
-                return $langCode;
-            }
-
-            $modx->log(xPDO::LOG_LEVEL_ERROR, "Kein Sprachenkürzel gefunden.");
-            return $LangInit;
-        }
+        return [$langCode, $productName];
+    }
+    else {    
+        $modx->log(xPDO::LOG_LEVEL_ERROR, "Kein Sprachenkürzel oder Produktnamen gefunden.");
     }
 }
+
 
 /*                  Duplizierung und Erstellung der neuen Inhalten                         */
 
 // Hauptkategorie für die Duplizierung und Erstellung der neuen Inhalte
-function allgetTogether ($txt_Doc_B,$Contentlinks, $Chunklinks, $modx){
+function allgetTogether ($txt_Doc_B, $Contentlinks, $Chunklinks, $modx){
 
     // Durchlaufe alle TXT Dateien im zweiten Ordner
     $filesB = scandir($txt_Doc_B);
@@ -449,76 +436,137 @@ function allgetTogether ($txt_Doc_B,$Contentlinks, $Chunklinks, $modx){
             $fileContent = file_get_contents($filePath);
 
             // Extrahiere den Sprachcode aus dem Dateinamen
-            $langCode = fileNameLangExtract($filePath, $modx);
+            $langCode = '';
+            $productCode = '';
+            list($langCode, $productCode) = fileNameLangExtract($filePath, $modx);
 
             // Überprüfe ob Kontext bereits existiert, wenn nicht erstelle Sie
             if (!$langContext = $modx->getContext($langCode)) {
-                $langContext = createLangContext($langCode, $modx);
+                $langContext = createLangContext($langCode, $productCode,$modx);
             }
             // Überprüfe ob Kategorie bereits existiert, wenn nicht erstelle Sie
-            if (!$langCategory = $modx->getObject('modCategory', array('name' => $langCode))) {
-                $langCategory = createLangCategory($langCode, $modx);
+            if (!$langCategory = $modx->getObject('modCategory', array('category' => $langCode))) {
+                $langCategory = createLangCategory($langCode, $productCode, $modx);
             }
 
             // Dupliziere die von 'Web' Ressourcen in den neuen Kontext
-            duplicateResources($Ressourcelinks,$langContext, $modx);
+            $duplicateIDRessource=duplicateResources($Ressourcelinks, $langContext, $modx, $langContext);
             
-            // Dupliziere die Chunks von der Kategorie DE in die neue Kategorie
-            duplicateChunks($Chunklinks,$langCategory, $modx);
+        /*    // Dupliziere die Chunks von der Kategorie DE in die neue Kategorie
+            $duplicateIDChunk=duplicateChunks($Chunklinks,$langCategory, $modx);
 
             // Füge die Inhalte, im neuen Kontext, in den Ressourcen ein, abhängig von der Sprache
-            insertRessource($Ressourcelinks, $fileContent, $langContext, $modx);
+            $insertCon=insertRessource($Ressourcelinks, $fileContent, $langContext, $modx);
 
             // Füge die Inhalte, in der neuen Kategorie, in den Chunks ein, abhängig von der Sprache
-            insertChunks($Chunklinks, $fileContent, $langCategory, $modx);
+            $insertChu=insertChunks($Chunklinks, $fileContent, $langCategory, $modx);
 
 
             // Ausgabe
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Kontext, Kategorie, Chunks, Ressouren wurden erfolgreich dupliziert, erstellt und eingefügt.');
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Kontext, Kategorie, Chunks, Ressouren wurden erfolgreich dupliziert, erstellt und eingefügt.'); */
         }
     }
 }
 
-// Funktion zum Erstellen eines Kontextes
-function createLangContext($langCode, $modx) {
-    // Erstelle den Kontext
-    $langContext = $modx->newObject('modContext');
-    $langContext->fromArray(array(
-        'key' => $langCode,
-        'name' => $langCode,
-        'rank' => 0,
-        'menuindex' => 0,
-        'default' => 0,
-        'config' => '',
-        'base_url' => '/'. $langCode.'/',
-    ));
+// Funktion zum Erstellen eines Kontexts (falls nicht vorhanden)
+function createLangContext($langCode, $productCode, $modx) {
+    // Überprüfe, ob der Kontext bereits existiert
+    $existingContext = $modx->getObject('modContext', array('key' => $langCode));
 
-    // Speichere den Kontext
-    if ($langContext->save() === false) {
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Erstellen des Kontextes: ' . print_r($langContext->error, true));
+    if ($existingContext) {
+        // Debug: Ausgabe der Eigenschaften des vorhandenen Kontexts
+        $modx->log(xPDO::LOG_LEVEL_INFO, 'Kontext bereits vorhanden: ' . print_r($existingContext->toArray(), true));
+
+        // Kontext bereits vorhanden, gib das vorhandene Kontextobjekt zurück
+        return $existingContext;
+    } else {
+        // Kontext erstellen, wenn nicht vorhanden
+        $newContext = $modx->newObject('modContext');
+
+        // Eigneschaften Einstellung für den neuen Kontext
+        $newContext->set('key', $langCode);
+        $newContext->set('name', strtoupper($langCode));
+        $newContext->set('description', strtoupper($productCode));
+        $newContext->set('rank', 0);
+        $newContext->set('menuindex', 0);
+        $newContext->set('default', 0);
+        $newContext->save();
+
+        // Füge die base_url als Kontexteinstellung hinzu
+        $baseURLSetting = $modx->newObject('modContextSetting');
+        $baseURLSetting->set('key', 'base_url');
+        $baseURLSetting->set('xtype', 'textfield');
+        $baseURLSetting->set('value', '/' . $langCode . '/');
+        $baseURLSetting->set('namespace', 'core');
+        $baseURLSetting->set('area', 'web');
+        $baseURLSetting->set('context_key', $langCode); 
+        $baseURLSetting->save();
+
+        // Füge cultureKey als Kontexteinstellung hinzu
+        $cultureKeySetting = $modx->newObject('modContextSetting');
+        $cultureKeySetting->set('key', 'cultureKey');
+        $cultureKeySetting->set('xtype', 'textfield');
+        $cultureKeySetting->set('value', $langCode);
+        $cultureKeySetting->set('namespace', 'core');
+        $cultureKeySetting->set('area', 'web');
+        $cultureKeySetting->set('context_key', $langCode); // Verknüpfe die Einstellung mit dem Kontext
+        $cultureKeySetting->save();
+
+        // Füge error_page als Kontexteinstellung hinzu
+        $errorPageSetting = $modx->newObject('modContextSetting');
+        $errorPageSetting->set('key', 'error_page');
+        $errorPageSetting->set('xtype', 'numberfield');
+        $errorPageSetting->set('value', 1); // Hier sollte die ID deiner Fehlerseite stehen
+        $errorPageSetting->set('namespace', 'core');
+        $errorPageSetting->set('area', 'web');
+        $errorPageSetting->set('context_key', $langCode);
+        $errorPageSetting->save();
+
+
+        // Speichere den neuen Kontext
+        if ($newContext->save() === false) {
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Erstellen des Kontexts: ' . print_r($newContext->error, true));
+            return null;
+        }
+        // Debug: Ausgabe der Eigenschaften des neuen Kontexts nach dem Speichern
+        # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Eigenschaften des neuen Kontexts nach dem Speichern: ' . print_r($newContext->toArray(), true));
+
+
+    // Gebe das erstellte Kontextobjekt zurück
+    return $newContext;
     }
-
-    // Gebe den Kontext zurück
-    return $langContext;
 }
 
 //Funktion zum Erstellen einer Kategorie
-function createLangCategory($langCode, $modx){
-    // Erstelle die Kategorie
-    $langCategory = $modx->newObject('modCategory');
-    $langCategory->fromArray(array(
-        'name' => $langCode,
-        'parent' => 0,
-        'rank' => 0,
-    ));
+// Funktion zum Erstellen einer Kategorie (Hauptkategorie oder Unterkategorie)
+function createLangCategory($langCode, $productCode = null, $modx){
+    // Erstelle die Hauptkategorie
+    $mainCategory = $modx->newObject('modCategory');
+    $mainCategory->set('category', $langCode);
+    $mainCategory->set('parent', 0); // Keine Elternkategorie (Hauptkategorie)
 
-    // Speichere die Kategorie
-    if ($langCategory->save() === false) {
-        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Erstellen der Kategorie: ' . print_r($langCategory->error, true));
+    // Speichere die Hauptkategorie
+    if ($mainCategory->save() === false) {
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Erstellen der Hauptkategorie: ' . print_r($mainCategory->error, true));
+        return null;
     }
 
-    // Gebe die Kategorie zurück
-    return $langCategory;
+    // Erstelle die Unterkategorie, wenn $productCode angegeben ist
+    if ($productCode !== null) {
+        // Erstelle die Unterkategorie
+        $subCategory = $modx->newObject('modCategory');
+        $subCategory->set('category', $productCode);
+        $subCategory->set('parent', $mainCategory->get('id')); // Setze die ID der Hauptkategorie als Elternwert
+
+        // Speichere die Unterkategorie
+        if ($subCategory->save() === false) {
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Erstellen der Unterkategorie: ' . print_r($subCategory->error, true));
+            return null;
+        }
+    }
+
+    // Gebe die Hauptkategorie zurück
+    return $mainCategory;
 }
 
 // Funktion zum Duplizieren von Ressourcen in neuen Kontext
