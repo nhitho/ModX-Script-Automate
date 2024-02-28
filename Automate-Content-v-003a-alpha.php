@@ -450,7 +450,7 @@ function allgetTogether ($txt_Doc_B, $Contentlinks, $Chunklinks, $modx){
             }
 
             // Dupliziere die von 'Web' Ressourcen in den neuen Kontext
-            $duplicateIDRessource=duplicateResources($Ressourcelinks, $langContext, $modx, $langContext);
+            #$duplicateIDRessource=duplicateResources($Ressourcelinks, $langContext, $modx, $langContext);
             
         /*    // Dupliziere die Chunks von der Kategorie DE in die neue Kategorie
             $duplicateIDChunk=duplicateChunks($Chunklinks,$langCategory, $modx);
