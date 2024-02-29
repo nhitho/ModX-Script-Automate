@@ -78,7 +78,6 @@ else {
 
 /*                 Schadwareüberprüfung                                               */
 
-
 // Funktion zur Überprüfung der Dateien
 function MaliciousCode($content, $modx) {
     // Definiere Muster, nach denen im TXT-Inhalt gesucht werden soll
@@ -424,9 +423,9 @@ function fileNameLangExtract($filePath, $modx) {
 /*                  Duplizierung und Erstellung der neuen Inhalten                         */
 
 // Hauptkategorie für die Duplizierung und Erstellung der neuen Inhalte
-function allgetTogether ($txt_Doc_B, $Contentlinks, $Chunklinks, $modx, $sourceContextKey){
+function allgetTogether ($txt_Doc_B, $RessourceLinks, $ChunkLinks, $modx, $sourceContextKey){
     // Mapping-Tabelle für gemappte IDs
-    $IDMap = [];
+    $IDMap = array('resource' => array());
     
     // Durchlaufe alle TXT Dateien im zweiten Ordner
     $filesB = scandir($txt_Doc_B);
@@ -443,8 +442,8 @@ function allgetTogether ($txt_Doc_B, $Contentlinks, $Chunklinks, $modx, $sourceC
             list($langCode, $productCode) = fileNameLangExtract($filePath, $modx);
 
             if ($IDMap=duplicateContext($modx, $sourceContextKey, $langCode, $IDMap, $productCode)) {
-                // Erfolgreich dupliziert
-                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Kontext erfolgreich dupliziert.');
+                // Debug: IDMap
+               #$modx->log(xPDO::LOG_LEVEL_ERROR, print_r($IDMap, true));
             } else {
                 // Fehler bei der Kontextduplizierung
                 $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler bei der Kontextduplizierung.');
@@ -455,18 +454,11 @@ function allgetTogether ($txt_Doc_B, $Contentlinks, $Chunklinks, $modx, $sourceC
                 $langCategory = createLangCategory($langCode, $productCode, $modx);
             }
             
-        /*  // Dupliziere die Chunks von der Kategorie DE in die neue Kategorie
-            $duplicateIDChunk=duplicateChunks($Chunklinks,$langCategory, $modx);
-
             // Füge die Inhalte, im neuen Kontext, in den Ressourcen ein, abhängig von der Sprache
-            $insertCon=insertRessource($Ressourcelinks, $fileContent, $langContext, $modx);
-
-            // Füge die Inhalte, in der neuen Kategorie, in den Chunks ein, abhängig von der Sprache
-            $insertChu=insertChunks($Chunklinks, $fileContent, $langCategory, $modx);
-
+            insertResource($RessourceLinks, $fileContent, $langCode, $modx, $IDMap);
 
             // Ausgabe
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Kontext, Kategorie, Chunks, Ressouren wurden erfolgreich dupliziert, erstellt und eingefügt.'); */
+        #    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Kontext, Kategorie, Chunks, Ressouren wurden erfolgreich dupliziert, erstellt und eingefügt.');
         }
     }
 }
@@ -475,7 +467,7 @@ function allgetTogether ($txt_Doc_B, $Contentlinks, $Chunklinks, $modx, $sourceC
 function createLangCategory($langCode, $productCode = null, $modx){
     // Erstelle die Hauptkategorie
     $mainCategory = $modx->newObject('modCategory');
-    $mainCategory->set('category', $langCode);
+    $mainCategory->set('category', strtoupper($langCode));
     $mainCategory->set('parent', 0); // Keine Elternkategorie (Hauptkategorie)
 
     // Speichere die Hauptkategorie
@@ -502,7 +494,6 @@ function createLangCategory($langCode, $productCode = null, $modx){
     return $mainCategory;
 }
 
-
 function duplicateContext($modx, $sourceContextKey, $langCode, $IDMap, $productCode) {
     
     // Lade den aktuellen Kontext samt Ressourcen
@@ -522,61 +513,156 @@ function duplicateContext($modx, $sourceContextKey, $langCode, $IDMap, $productC
         $newContext->set('name', strtoupper($langCode)); // Name für den Kontext
         $newContext->set('description', $productCode); // Beschreibung für den Kontext
         $newContext->save();
-        
-        // Speichere das Mapping für den Kontext
-        $IDMap['context'][$sourceContext->get('id')] = $newContext->get('id');
+
+        // Speichere das Mapping für die alte ID und die neue ID
+        $IDMap[$sourceContext->get('id')] = $newContext->get('id');
 
         // Benenne die Ressourcen des neuen Kontexts um (rekursiv)
         foreach ($sourceResources as $resource) {
-            duplicateResource($modx, $resource->get('id'), $langCode);
+            duplicateResource($modx, $resource->get('id'), $langCode, $IDMap);
         }
     }
     else {
         foreach ($sourceResources as $resource) {
-            duplicateResource($modx, $resource->get('id'), $langCode);
+            duplicateResource($modx, $resource->get('id'), $langCode, $IDMap);
         }
     }
 
     return $IDMap;
 }
 
-function duplicateResource($modx, $sourceResourceId, $langCode, $parent = 0) {
+function duplicateResource($modx, $sourceResourceId, $langCode, &$IDMap, $parent = 0) {
     $sourceResource = $modx->getObject('modResource', $sourceResourceId);
     if (!$sourceResource) {
-        return;
+        return $IDMap;
     }
     if (!$newResource = $modx->getObject('modResource', ['context_key' => $langCode, 'pagetitle' => $sourceResource->get('pagetitle')])) {
         $newResource = $modx->newObject('modResource');
         $newResource->fromArray($sourceResource->toArray());
         $newResource->set('context_key', $langCode);
         $newResource->set('parent', $parent);
-        $newResource->save();
-
-        // Speichere das Mapping für die Ressource
-        $IDMap['resource'][$sourceResource->get('id')] = $newResource->get('id');
-
-        // Kopiere rekursiv die untergeordneten Ressourcen
-        $sourceChildren = $modx->getCollection('modResource', ['parent' => $sourceResourceId]);
-        foreach ($sourceChildren as $child) {
-            duplicateResource($modx, $child->get('id'), $langCode, $newResource->get('id'));
+        if ($newResource->save()) {
+            // Speichere das Mapping für die alte ID und die neue ID
+            $IDMap['resource'][$sourceResource->get('id')] = $newResource->get('id');
+            
+            // Kopiere rekursiv die untergeordneten Ressourcen
+            $sourceChildren = $modx->getCollection('modResource', ['parent' => $sourceResourceId]);
+            foreach ($sourceChildren as $child) {
+                duplicateResource($modx, $child->get('id'), $langCode, $IDMap, $newResource->get('id'));
+            }
+        } else {
+            // Hier könntest du eine Fehlermeldung ausgeben, falls gewünscht
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Speichern der Ressource mit Titel: ' . $pagetitle);
         }
-
-        return $IDMap;
-    }    
+    }
+    
+    return $IDMap;    
 }
-
 
 // Funktion zum Einfügen von Inhalten in Ressourcen
-function insertRessource($Ressourcelinks, $fileContent, $langContext, $modx) {
-    foreach ($Ressourcelinks as $links){
-        // Füge anhand der html_line und file_line die Inhalte in die Ressourcen ein
-        $resource = $modx->getObject('modResource', $links['id']);
-        $htmlContent = $resource->getContent();
-        $newHtmlContent = insertContent($htmlContent, $fileContent, $links['html_line'], $links['file_line']);
-        $resource->setContent($newHtmlContent);
-        $resource->save();
+function insertResource($RessourceLinks, $fileContent, $langCode, $modx, &$IDMap) {
+    // Positionsdaten für den neuen Text erhalten
+    $positionText = getPositionText($fileContent, $modx);
+
+    // Durchlaufe alle Ressource-Links
+    foreach ($RessourceLinks as $sourceResource) {
+        // Überprüfe, ob es ein gemapptes Ziel für die aktuelle Ressource gibt
+        if (isset($IDMap['resource'][$sourceResource['id']])) {
+            $newResourceID = $IDMap['resource'][$sourceResource['id']];
+
+            // Lade die Ziel-Ressource
+            $newResource = $modx->getObject('modResource', $newResourceID);
+
+            // Überprüfe, ob die Ziel-Ressource gefunden wurde
+            if ($newResource) {
+                // Suche die passende Position im Text
+                $position = array_filter($positionText, function ($pos) use ($sourceResource) {
+                    return $pos['file_line'] == $sourceResource['file_line'] && trim($pos['file_content']) == trim($sourceResource['file_content']);
+                });
+
+                // Falls Position gefunden wurde
+                if (!empty($position)) {
+                    $position = reset($position);
+                    // Extrahiere den neuen Inhalt
+                    $newContent = $position['file_content'];
+
+                    // Füge den neuen Text in das HTML-Feld der Ziel-Ressource ein
+                    $htmlContent = $newResource->get('content');
+                    $newHtmlContent = str_replace($sourceResource['file_content'], $newContent, $htmlContent);
+
+                    // Aktualisiere das HTML-Feld der Ziel-Ressource
+                    $newResource->set('content', $newHtmlContent);
+                    $newResource->save();
+                } else {
+                    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Position im Text nicht gefunden für Quell-Ressource ID ' . $sourceResource['id']);
+                }
+            } else {
+                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ziel-Ressource nicht gefunden für ID ' . $newResourceID);
+            }
+        } else {
+            // Keine gemappte ID für diese Quell-Ressource gefunden
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ziel-ID nicht gefunden für Quell-Ressource ID ' . $sourceResource['id']);
+        }
     }
 }
+
+
+
+
+/*
+
+// Funktion zum Einfügen von Inhalten in Ressourcen
+function insertRessource($Ressourcelinks, $fileContent, $langCode, $modx, &$IDMap) {
+    foreach ($RessourceLinks as $sourceResource) {
+        // Überprüfe, ob es ein gemapptes Ziel für die aktuelle Ressource gibt
+        if (isset($IDMap['resource'][$sourceResource['id']])) {
+            $newResourceID = $IDMap['resource'][$sourceResource['id']];
+
+            // Lade die Ressource
+            $newResource = $modx->getObject('modResource', $newResourceID);
+
+            // Überprüfe, ob die Ressource gefunden wurde
+            if ($newResource) {
+                // Suche die passende Position im Text
+                $position = array_filter($positionText, function ($pos) use ($sourceResource) {
+                    return $pos['file_line'] == $sourceResource['file_line'];
+                });
+
+                if (!empty($position)) {
+                    $position = reset($position);
+                    $newContent = $position['file_content'];
+
+                    // Füge den neuen Text in das HTML-Feld der Ziel-Ressource ein
+                    $htmlLine = $sourceResource['html_line'];
+                    $newHtmlContent = str_replace($position['file_content'], $newContent, $htmlLine);
+                    
+                    // Aktualisiere das HTML-Feld der Ziel-Ressource
+                    $newResource->set('content', $newHtmlContent);
+                    $newResource->save();
+                } else {
+                    $modx->log(xPDO::LOG_LEVEL_ERROR, 'Position im Text nicht gefunden für Quell-Ressource ID ' . $sourceResource['id']);
+                }
+            } else {
+                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ziel-Ressource nicht gefunden für ID ' . $newResourceID);
+            }
+        } else {
+            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Ziel-ID nicht gefunden für Quell-Ressource ID ' . $sourceResource['id']);
+        }
+    }
+}
+
+*/
+
+/*                           (In Development) Chunks in allgetTogheter                                          */
+
+/*
+    function allgetTogheter () {
+          // Dupliziere die Chunks von der Kategorie DE in die neue Kategorie
+            $duplicateIDChunk=duplicateChunks($Chunklinks,$langCategory, $modx);
+
+            // Füge die Inhalte, in der neuen Kategorie, in den Chunks ein, abhängig von der Sprache
+            $insertChu=insertChunks($Chunklinks, $fileContent, $langCategory, $modx);
+    }
 
 // Funktion zum Duplizieren von Chunks in neue Kategorie
 function duplicateChunks($Chunklinks, $langCategory, $modx) {
@@ -598,20 +684,12 @@ function InsertChunks($Chunklinks, $fileContent, $langCategory, $modx) {
         $chunk->save();
     }
 }
-
-// Funktion zum Einfügen von Inhalten
-function insertContent($htmlContent, $fileContent, $htmlLine, $fileLine) {
-    $htmlLines = explode("\n", $htmlContent);
-    $fileLines = explode("\n", $fileContent);
-
-    $htmlLines[$htmlLine - 1] = $fileLines[$fileLine - 1];
-
-    return implode("\n", $htmlLines);
-}
+*/
 
 
 /*                           (In Development) Template Variable                                            */
-/* 
+/*
+
 // Funktion der Auslesung der Position vom Template-Variable des Ressoruces 
 function getTVfromRessource($resource) {
     $tvArray = array();
