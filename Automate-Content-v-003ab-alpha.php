@@ -7,8 +7,6 @@ require_once MODX_BASE_PATH . 'core/config/config.inc.php';
 $modx = new modX();
 $modx -> initialize('web');  
 
-
-
 // Basis-Ordner-Überwachung
 $txt_Doc_A = MODX_BASE_PATH . 'assets/txt-original/';
 $txt_Doc_B = MODX_BASE_PATH . 'assets/txt-languages/';
@@ -23,6 +21,8 @@ $Chunklinks = array();
 // Schwellenwert für die Ähnlichkeit der Texte in Prozent von 0-100 (0 für keine Ähnlichkeit, 100 für identische Texte)
 $threshold = 70;
 
+// Kontextschlüssel für den Quellkontext
+$sourceContextKey = 'web';
 
 /*                 Hauptfunktion                              */
 
@@ -59,7 +59,7 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
     }
     
     // Lade Inhalte von Content-Ressourcen und TV-Variablen
-    $RessourceLinks = compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold);
+    $RessourceLinks = compareContentWithTxt($sourceContextKey, $txt_Doc_A, $ignoreTags, $modx, $threshold);
     
     #$modx->log(xPDO::LOG_LEVEL_ERROR, print_r($RessourceLinks, true));
 
@@ -69,7 +69,7 @@ if (is_dir($txt_Doc_A) && is_dir($txt_Doc_B)) {
     #$modx->log(xPDO::LOG_LEVEL_ERROR, print_r($ChunkLinks, true));
     
     // Füge die Inhalte in die neuen Kontext, Kategorieren und Chunks ein
-    allgetTogether($txt_Doc_B, $RessourceLinks, $ChunkLinks, $modx);
+    allgetTogether($txt_Doc_B, $RessourceLinks, $ChunkLinks, $modx, $sourceContextKey);
 } 
 else {
     // Debug: Ausgabe
@@ -134,11 +134,11 @@ function getPositionText($fileContent, $modx) {
 /*                           Ressource                                                */
 
 // Funktion zum Vergleich der Ressource Content und TXT Inhalt
-function compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold) {
+function compareContentWithTxt($sourceContextKey, $txt_Doc_A, $ignoreTags, $modx, $threshold) {
     $linkArray = array();
 
     // Rufe die Funktion zum Aufruf des ModX Kontext key 'web'
-    $webResources = getWebContextResources($modx);
+    $webResources = getWebContextResources($sourceContextKey, $modx);
     
     // Durchlaufe alle TXT Dateien im ersten Ordner
     $filesA = scandir($txt_Doc_A);
@@ -160,13 +160,13 @@ function compareContentWithTxt($txt_Doc_A, $ignoreTags, $modx, $threshold) {
 }
 
 // Funktion zum Aufruf des Modx Kontext key 'web'
-function getWebContextResources($modx) {
+function getWebContextResources($sourceContextKey, $modx) {
     
     // Rufe ModX Kontext auf
-    $webContext = $modx->getContext('web');
+    $webContext = $modx->getContext($sourceContextKey);
 
     // Rufe die darin enthaltenen Ressourcen auf
-    if (!$resources = $modx->getCollection('modResource', array('context_key' => 'web'))){
+    if (!$resources = $modx->getCollection('modResource', array('context_key' => $sourceContextKey))){
         $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Laden der Ressourcen: ' . $webContext->error); 
     }
 
@@ -424,8 +424,10 @@ function fileNameLangExtract($filePath, $modx) {
 /*                  Duplizierung und Erstellung der neuen Inhalten                         */
 
 // Hauptkategorie für die Duplizierung und Erstellung der neuen Inhalte
-function allgetTogether ($txt_Doc_B, $Contentlinks, $Chunklinks, $modx){
-
+function allgetTogether ($txt_Doc_B, $Contentlinks, $Chunklinks, $modx, $sourceContextKey){
+    // Mapping-Tabelle für gemappte IDs
+    $IDMap = [];
+    
     // Durchlaufe alle TXT Dateien im zweiten Ordner
     $filesB = scandir($txt_Doc_B);
     foreach ($filesB as $file) {
@@ -440,19 +442,20 @@ function allgetTogether ($txt_Doc_B, $Contentlinks, $Chunklinks, $modx){
             $productCode = '';
             list($langCode, $productCode) = fileNameLangExtract($filePath, $modx);
 
-            // Überprüfe ob Kontext bereits existiert, wenn nicht erstelle Sie
-            if (!$langContext = $modx->getContext($langCode)) {
-                $langContext = createLangContext($langCode, $productCode,$modx);
+            if ($IDMap=duplicateContext($modx, $sourceContextKey, $langCode, $IDMap, $productCode)) {
+                // Erfolgreich dupliziert
+                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Kontext erfolgreich dupliziert.');
+            } else {
+                // Fehler bei der Kontextduplizierung
+                $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler bei der Kontextduplizierung.');
             }
+
             // Überprüfe ob Kategorie bereits existiert, wenn nicht erstelle Sie
             if (!$langCategory = $modx->getObject('modCategory', array('category' => $langCode))) {
                 $langCategory = createLangCategory($langCode, $productCode, $modx);
             }
-
-            // Dupliziere die von 'Web' Ressourcen in den neuen Kontext
-            #$duplicateIDRessource=duplicateResources($Ressourcelinks, $langContext, $modx, $langContext);
             
-        /*    // Dupliziere die Chunks von der Kategorie DE in die neue Kategorie
+        /*  // Dupliziere die Chunks von der Kategorie DE in die neue Kategorie
             $duplicateIDChunk=duplicateChunks($Chunklinks,$langCategory, $modx);
 
             // Füge die Inhalte, im neuen Kontext, in den Ressourcen ein, abhängig von der Sprache
@@ -468,76 +471,6 @@ function allgetTogether ($txt_Doc_B, $Contentlinks, $Chunklinks, $modx){
     }
 }
 
-// Funktion zum Erstellen eines Kontexts (falls nicht vorhanden)
-function createLangContext($langCode, $productCode, $modx) {
-    // Überprüfe, ob der Kontext bereits existiert
-    $existingContext = $modx->getObject('modContext', array('key' => $langCode));
-
-    if ($existingContext) {
-        // Debug: Ausgabe der Eigenschaften des vorhandenen Kontexts
-        $modx->log(xPDO::LOG_LEVEL_INFO, 'Kontext bereits vorhanden: ' . print_r($existingContext->toArray(), true));
-
-        // Kontext bereits vorhanden, gib das vorhandene Kontextobjekt zurück
-        return $existingContext;
-    } else {
-        // Kontext erstellen, wenn nicht vorhanden
-        $newContext = $modx->newObject('modContext');
-
-        // Eigneschaften Einstellung für den neuen Kontext
-        $newContext->set('key', $langCode);
-        $newContext->set('name', strtoupper($langCode));
-        $newContext->set('description', strtoupper($productCode));
-        $newContext->set('rank', 0);
-        $newContext->set('menuindex', 0);
-        $newContext->set('default', 0);
-        $newContext->save();
-
-        // Füge die base_url als Kontexteinstellung hinzu
-        $baseURLSetting = $modx->newObject('modContextSetting');
-        $baseURLSetting->set('key', 'base_url');
-        $baseURLSetting->set('xtype', 'textfield');
-        $baseURLSetting->set('value', '/' . $langCode . '/');
-        $baseURLSetting->set('namespace', 'core');
-        $baseURLSetting->set('area', 'web');
-        $baseURLSetting->set('context_key', $langCode); 
-        $baseURLSetting->save();
-
-        // Füge cultureKey als Kontexteinstellung hinzu
-        $cultureKeySetting = $modx->newObject('modContextSetting');
-        $cultureKeySetting->set('key', 'cultureKey');
-        $cultureKeySetting->set('xtype', 'textfield');
-        $cultureKeySetting->set('value', $langCode);
-        $cultureKeySetting->set('namespace', 'core');
-        $cultureKeySetting->set('area', 'web');
-        $cultureKeySetting->set('context_key', $langCode); // Verknüpfe die Einstellung mit dem Kontext
-        $cultureKeySetting->save();
-
-        // Füge error_page als Kontexteinstellung hinzu
-        $errorPageSetting = $modx->newObject('modContextSetting');
-        $errorPageSetting->set('key', 'error_page');
-        $errorPageSetting->set('xtype', 'numberfield');
-        $errorPageSetting->set('value', 1); // Hier sollte die ID deiner Fehlerseite stehen
-        $errorPageSetting->set('namespace', 'core');
-        $errorPageSetting->set('area', 'web');
-        $errorPageSetting->set('context_key', $langCode);
-        $errorPageSetting->save();
-
-
-        // Speichere den neuen Kontext
-        if ($newContext->save() === false) {
-            $modx->log(xPDO::LOG_LEVEL_ERROR, 'Fehler beim Erstellen des Kontexts: ' . print_r($newContext->error, true));
-            return null;
-        }
-        // Debug: Ausgabe der Eigenschaften des neuen Kontexts nach dem Speichern
-        # $modx->log(xPDO::LOG_LEVEL_ERROR, 'Eigenschaften des neuen Kontexts nach dem Speichern: ' . print_r($newContext->toArray(), true));
-
-
-    // Gebe das erstellte Kontextobjekt zurück
-    return $newContext;
-    }
-}
-
-//Funktion zum Erstellen einer Kategorie
 // Funktion zum Erstellen einer Kategorie (Hauptkategorie oder Unterkategorie)
 function createLangCategory($langCode, $productCode = null, $modx){
     // Erstelle die Hauptkategorie
@@ -569,15 +502,69 @@ function createLangCategory($langCode, $productCode = null, $modx){
     return $mainCategory;
 }
 
-// Funktion zum Duplizieren von Ressourcen in neuen Kontext
-function duplicateResources($Ressourcelinks, $langContext, $modx) {
-    foreach ($Ressourcelinks as $links){
-        // Dupliziere die Ressourcen, abhänging von der ID aus den $Ressourcelinks, in die neue Kontext ein
-        $resource = $modx->getObject('modResource', $links['id']);
-        $newResource = $resource->duplicate($langContext);
-        $newResource->save();
+
+function duplicateContext($modx, $sourceContextKey, $langCode, $IDMap, $productCode) {
+    
+    // Lade den aktuellen Kontext samt Ressourcen
+    $sourceContext = $modx->getObject('modContext', ['key' => $sourceContextKey]);
+    if (!$sourceContext) {
+        $modx->log(xPDO::LOG_LEVEL_ERROR, 'Quellkontext nicht gefunden für ' . $sourceContextKey);
+        return false;
     }
+
+    $sourceResources = $modx->getCollection('modResource', ['context_key' => $sourceContextKey, 'parent' => 0]);
+
+    if (!$modx->getObject('modContext', ['key' => $langCode])) {
+        // Dupliziere den Kontext samt Ressourcen
+        $newContext = $modx->newObject('modContext');
+        $newContext->fromArray($sourceContext->toArray());
+        $newContext->set('key', $langCode); // Schlüssel für den neuen Kontext
+        $newContext->set('name', strtoupper($langCode)); // Name für den Kontext
+        $newContext->set('description', $productCode); // Beschreibung für den Kontext
+        $newContext->save();
+        
+        // Speichere das Mapping für den Kontext
+        $IDMap['context'][$sourceContext->get('id')] = $newContext->get('id');
+
+        // Benenne die Ressourcen des neuen Kontexts um (rekursiv)
+        foreach ($sourceResources as $resource) {
+            duplicateResource($modx, $resource->get('id'), $langCode);
+        }
+    }
+    else {
+        foreach ($sourceResources as $resource) {
+            duplicateResource($modx, $resource->get('id'), $langCode);
+        }
+    }
+
+    return $IDMap;
 }
+
+function duplicateResource($modx, $sourceResourceId, $langCode, $parent = 0) {
+    $sourceResource = $modx->getObject('modResource', $sourceResourceId);
+    if (!$sourceResource) {
+        return;
+    }
+    if (!$newResource = $modx->getObject('modResource', ['context_key' => $langCode, 'pagetitle' => $sourceResource->get('pagetitle')])) {
+        $newResource = $modx->newObject('modResource');
+        $newResource->fromArray($sourceResource->toArray());
+        $newResource->set('context_key', $langCode);
+        $newResource->set('parent', $parent);
+        $newResource->save();
+
+        // Speichere das Mapping für die Ressource
+        $IDMap['resource'][$sourceResource->get('id')] = $newResource->get('id');
+
+        // Kopiere rekursiv die untergeordneten Ressourcen
+        $sourceChildren = $modx->getCollection('modResource', ['parent' => $sourceResourceId]);
+        foreach ($sourceChildren as $child) {
+            duplicateResource($modx, $child->get('id'), $langCode, $newResource->get('id'));
+        }
+
+        return $IDMap;
+    }    
+}
+
 
 // Funktion zum Einfügen von Inhalten in Ressourcen
 function insertRessource($Ressourcelinks, $fileContent, $langContext, $modx) {
